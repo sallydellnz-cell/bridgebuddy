@@ -103,7 +103,13 @@ function Card({
 }
 
 function getPlayer(playerId: string) {
-  return csvMembers.find((player: any) => player.member_id === playerId);
+  return {
+    initials: "",
+    first_name: "",
+    last_name: "",
+    level: "",
+    clubs: "",
+  };
 }
 
 function getRequestCount(sessionId: string, requests: PartnerRequest[]) {
@@ -2602,7 +2608,7 @@ if (alreadyLooking) {
                       <div style={styles.name}>
                         {player.first_name} {player.last_name}
                       </div>
-                      {request.requestTypes.map((type) => (
+                      {request.requestTypes.map((type: any) => (
                         <Badge key={type}>{type}</Badge>
                       ))}
                     </div>
@@ -2750,38 +2756,39 @@ if (alreadyLooking) {
         flexWrap: "wrap",
       }}
     >
-      <Button
-        onClick={() => setView("login")}
-        style={{
-          background: "linear-gradient(135deg, #1e88e5, #3949db)",
-          color: "white",
-          border: "none",
-          borderRadius: "16px",
-          padding: "16px 34px",
-          fontSize: "18px",
-          fontWeight: 700,
-          boxShadow: "0 12px 30px rgba(57,73,219,0.25)",
-          cursor: "pointer",
-        }}
-      >
-        Login
-      </Button>
 
-      <Button
-        onClick={() => setView("createProfile")}
-        style={{
-          background: "white",
-          color: "#1e88e5",
-          border: "2px solid #90caf9",
-          borderRadius: "16px",
-          padding: "16px 34px",
-          fontSize: "18px",
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
-        Create Profile
-      </Button>
+    <button
+      onClick={() => setView("login")}
+      style={{
+        background: "linear-gradient(135deg, #1e88e5, #3949db)",
+        color: "white",
+        border: "none",
+        borderRadius: "16px",
+        padding: "16px 34px",
+        fontSize: "18px",
+        fontWeight: 700,
+        boxShadow: "0 12px 30px rgba(57,73,219,0.25)",
+        cursor: "pointer",
+      }}
+    >
+      Login
+    </button>
+
+    <button
+      onClick={() => setView("createProfile")}
+      style={{
+        background: "white",
+        color: "#1e88e5",
+        border: "2px solid #90caf9",
+        borderRadius: "16px",
+        padding: "16px 34px",
+        fontSize: "18px",
+        fontWeight: 700,
+        cursor: "pointer",
+      }}
+    >
+      Create Profile
+    </button>
     </div>
   </div>
 </div>              
