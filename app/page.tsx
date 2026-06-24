@@ -129,6 +129,7 @@ function calculateMatchScore(player: Player, session: Session) {
 }
 
 export default function BridgeBuddy() {
+  const [supabaseMembers, setSupabaseMembers] = useState<any[]>([]);
   const [supabaseSessions, setSupabaseSessions] = useState<any[]>([]);
   const [supabaseRequests, setSupabaseRequests] = useState<any[]>([]);
   const [supabaseInterests, setSupabaseInterests] = useState<any[]>([]);
@@ -141,6 +142,10 @@ export default function BridgeBuddy() {
       .select("*")
       .order("session_date", { ascending: true })
       .order("start_time", { ascending: true });
+
+    const { data: membersData, error: membersError } = await supabase
+      .from("members_current")
+      .select("*");
 
     const { data: requestData, error: requestError } = await supabase
       .from("session_players_looking_display")
@@ -163,6 +168,8 @@ export default function BridgeBuddy() {
 
     console.log("Supabase sessions:", data);
     console.log("Supabase error:", error);
+    console.log("Supabase members:", membersData);
+    console.log("Supabase members error:", membersError);
     console.log("Supabase requests:", requestData);
     console.log("Supabase request error:", requestError);
     console.log("Supabase interests:", interestsData);
@@ -172,6 +179,7 @@ export default function BridgeBuddy() {
     console.log("My matches display:", myMatchesData);
     console.log("My matches display error:", myMatchesError);
 
+    if (membersData) setSupabaseMembers(membersData);
     if (data) setSupabaseSessions(data);
     if (requestData) setSupabaseRequests(requestData);
     if (interestsData) setSupabaseInterests(interestsData);
@@ -777,7 +785,7 @@ if (alreadyLooking) {
 
           <Button
             onClick={() => {
-              const member = csvMembers.find(
+              const member = supabaseMembers.find(
                 (member: any) =>
                   member.email?.toLowerCase().trim() ===
                   profileEmail.toLowerCase().trim()
