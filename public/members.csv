@@ -1,0 +1,27 @@
+member_id,first_name,last_name,email,phone,clubs,level,systems,start_date,end_date,profile_completed,source_file
+1,Adam,Gouwland,adamgouwland@gmail.com,275258365,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+2,Adele,Clegg,adele.clegg@xtra.co.nz,21946186,Auckland Bridge Club,Advanced,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+3,Adele,Nairn,adelejnairn@gmail.com,,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+4,Adrian,Bridge ,adrian_bridge_au@hotmail.com,020 4875919,Auckland Bridge Club,Intermediate,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+5,Alan,Brame ,brame88@gmail.com,022.596 4096 ,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+6,Alan,Dormer,dormer@tohunga.co.nz,021 995 783,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+7,Alan ,Walpole,alan.walpole@gmail.com,027 4759750,Auckland Bridge Club,Intermediate,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+8,Alec ,Luen ,alec.luen@btconnect.com,211306683,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+9,Alex,Shan,alexzyshan@gmail.com,022 4701990,Auckland Bridge Club,Junior,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+10,Alison,Ruddelt,johnaliz@xtra.co.nz,027 2616344,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+11,Alistair,Burry,alistair.burry@gmail.com,21500614,Auckland Bridge Club,Intermediate,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+12,Allan,Morris,bevian@xtra.co.nz,225097615,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+13,Amanda,Evans ,evans.amanda@gmail.com,21813910,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+14,Andrea,Utton,utton@xtra.co.nz,21791918,Auckland Bridge Club,Beginner,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+15,Andrew,Green,andrew@green.net.nz,21457561,Auckland Bridge Club,Advanced,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+16,Andrew,Durrans,ajdurrans@gmail.com,021958 493,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+17,Angela,Ashley-Wilson,angela1@xtra.co.nz,212777795,Auckland Bridge Club,Junior,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+18,Angela,Butterworth,asbutterworth@gmail.com,212931601,Auckland Bridge Club,Intermediate,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+19,Angela,Heising,angelaheising@xtra.co.nz,21637178,Auckland Bridge Club,Advanced,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+20,Angela,Royle,bridge@rebc.co.nz,21319389,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+21,Anisia,Shami,anisia@xtra.co.nz,027 453 5088,Auckland Bridge Club,Beginner,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+22,Ann,Griffith,ann@griffith.co.nz,028 480 8047,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+23,Ann,Weatherston,aweatherston@gmail.com,021 167 7241,Auckland Bridge Club,Intermediate,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+24,Anna,Boers,annieboers@xtra.co.nz,09 630 4620,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
+25,Sally,Shentova,admin@thesigncompany.nz,021 771010,Auckland Bridge Club,Intermediate,,2/01/2026,,yes,bridge_members_from_screenshot.csv
+9999,Patrick,Carter,tripack@xtra.co.nz,027 315 9144,Auckland Bridge Club,Open,,1/01/2026,,yes,bridge_members_from_screenshot.csv
