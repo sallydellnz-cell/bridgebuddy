@@ -719,6 +719,100 @@ export default function BridgeBuddy() {
     refreshSupabaseData();
   }, []);
 
+    useEffect(() => {
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function scheduleRealtimeRefresh(payload?: any) {
+      console.log("Realtime event", payload);
+
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+
+      refreshTimer = setTimeout(() => {
+        console.log("Refreshing data...");
+        void refreshSupabaseData();
+      }, 250);
+    }
+
+    const realtimeChannel = supabase
+      .channel("bridgebuddy-live-updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_messages",
+        },
+        (payload) => scheduleRealtimeRefresh(payload)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "interests",
+        },
+        (payload) => scheduleRealtimeRefresh(payload)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "matches",
+        },
+        (payload) => scheduleRealtimeRefresh(payload)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "session_requests",
+        },
+        (payload) => scheduleRealtimeRefresh(payload)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+        },
+        (payload) => scheduleRealtimeRefresh(payload)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tournament_pair_registrations",
+        },
+        (payload) => scheduleRealtimeRefresh(payload)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "session_standby",
+        },
+        (payload) => scheduleRealtimeRefresh(payload)
+      )
+      .subscribe((status) => {
+        console.log("BridgeBuddy realtime status:", status);
+      });
+
+    return () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+
+      void supabase.removeChannel(realtimeChannel);
+    };
+  }, []);
+
   const [csvSessions, setCsvSessions] = useState<any[]>([]);
   const [csvMembers, setCsvMembers] = useState<any[]>([]);
   const [profileEmail, setProfileEmail] = useState("");
@@ -1557,14 +1651,23 @@ React.useEffect(() => {
   const [isTournamentInterestResponding, setIsTournamentInterestResponding] =
     useState(false);
   const [directorMatchRequest, setDirectorMatchRequest] = useState<any>(null);
+  const [directorMatchPartnerSearch, setDirectorMatchPartnerSearch] =
+    useState("");
+  const [directorMatchPartnerSurnameSearch, setDirectorMatchPartnerSurnameSearch] =
+    useState("");
+  const [directorMatchClubId, setDirectorMatchClubId] = useState("");
   const [directorMatchPartnerNumber, setDirectorMatchPartnerNumber] =
     useState("");
   const [directorMatchStandbyId, setDirectorMatchStandbyId] =
     useState<number | null>(null);
   const [directorMatchNote, setDirectorMatchNote] = useState("");
 
-    const [showTournamentRegistrationModal, setShowTournamentRegistrationModal] =
+  const [showTournamentRegistrationModal, setShowTournamentRegistrationModal] =
     useState(false);
+  const [tournamentRegisteringPlayerSearch, setTournamentRegisteringPlayerSearch] =
+    useState("");
+  const [selectedTournamentRegisteringPlayer, setSelectedTournamentRegisteringPlayer] =
+    useState<any>(null);
   const [tournamentPartnerSearch, setTournamentPartnerSearch] = useState("");
   const [selectedTournamentPartner, setSelectedTournamentPartner] =
     useState<any>(null);
@@ -2350,6 +2453,40 @@ React.useEffect(() => {
   const [directorStandbyList, setDirectorStandbyList] = useState<any[]>([]);
   const [directorStandbyCounts, setDirectorStandbyCounts] = useState<any[]>([]);
 
+  function openNewLookingRequestModal() {
+    const profileLevelNames = accountProfile.playingLevelIds
+      .map(
+        (levelId) =>
+          supabaseLevels.find(
+            (level: any) => Number(level.level_id) === Number(levelId)
+          )?.level_name
+      )
+      .filter(Boolean);
+    const profileSystemNames = accountProfile.systemIds
+      .map(
+        (systemId) =>
+          supabaseSystems.find(
+            (system: any) => Number(system.system_id) === Number(systemId)
+          )?.system_name
+      )
+      .filter(Boolean);
+
+    setWantedLevel(profileLevelNames.join(","));
+    setWantedSystems(profileSystemNames);
+    setShowRequestTypeModal(true);
+  }
+
+  function openNewStandbyModal() {
+    setStandbyPhone(
+      accountProfile.contactPhone || currentMember?.phone || ""
+    );
+    setStandbyLevelIds([...accountProfile.playingLevelIds]);
+    setStandbySystemIds([...accountProfile.systemIds]);
+    setStandbyUpdateProfile(true);
+    setStandbyNote("");
+    setShowStandbyModal(true);
+  }
+
   React.useEffect(() => {
     async function loadDirectorStandbyCounts() {
       if (
@@ -2417,7 +2554,7 @@ React.useEffect(() => {
     React.useEffect(() => {
     async function loadDirectorStandbyList() {
       if (
-        view !== "sessionDetail" ||
+        (view !== "sessionDetail" && view !== "tournamentDetail") ||
         !selectedSessionId ||
         !currentMember?.nz_bridge_number ||
         !isCurrentUserDirector
@@ -2459,7 +2596,7 @@ React.useEffect(() => {
   React.useEffect(() => {
     async function loadCurrentStandbyRecord() {
       if (
-        view !== "sessionDetail" ||
+        (view !== "sessionDetail" && view !== "tournamentDetail") ||
         !selectedSessionId ||
         !currentMember?.nz_bridge_number
       ) {
@@ -4414,7 +4551,9 @@ React.useEffect(() => {
                   setSessionReturnView(view === "mySessions" ? "mySessions" : "sessions");
                   setSelectedSessionId(session.session_instance_id);
                   setSessionDetailFilter("Active");
-                  setTournamentDetailFilter("My Status");
+                  setTournamentDetailFilter(
+                    isCurrentUserDirector ? "Looking" : "My Status"
+                  );
                   setView(
                     session.location_type === "Tournaments"
                       ? "tournamentDetail"
@@ -4892,6 +5031,40 @@ React.useEffect(() => {
       );
     }
 
+    const displayedTournamentDetailFilter =
+      isCurrentUserDirector && tournamentDetailFilter === "My Status"
+        ? "Looking"
+        : tournamentDetailFilter;
+
+    const tournamentRegisteringPlayerMatches =
+      tournamentRegisteringPlayerSearch.trim().length >= 2
+        ? supabaseMembers
+            .filter((member: any) => {
+              const searchValue = tournamentRegisteringPlayerSearch
+                .trim()
+                .toLowerCase();
+              const memberSearchValue = `${member.first_name || ""} ${
+                member.last_name || ""
+              } ${member.nz_bridge_number || ""}`.toLowerCase();
+
+              return (
+                String(member.nz_bridge_number) !==
+                  String(currentMember?.nz_bridge_number) &&
+                memberSearchValue.includes(searchValue)
+              );
+            })
+            .filter(
+              (member: any, index: number, members: any[]) =>
+                index ===
+                members.findIndex(
+                  (candidate: any) =>
+                    String(candidate.nz_bridge_number) ===
+                    String(member.nz_bridge_number)
+                )
+            )
+            .slice(0, 10)
+        : [];
+
     const tournamentPartnerMatches =
       tournamentPartnerSearch.trim().length >= 2
         ? supabaseMembers
@@ -4904,11 +5077,50 @@ React.useEffect(() => {
               return (
                 String(member.nz_bridge_number) !==
                   String(currentMember?.nz_bridge_number) &&
+                String(member.nz_bridge_number) !==
+                  String(
+                    selectedTournamentRegisteringPlayer?.nz_bridge_number
+                  ) &&
                 memberSearchValue.includes(searchValue)
               );
             })
+            .filter(
+              (member: any, index: number, members: any[]) =>
+                index ===
+                members.findIndex(
+                  (candidate: any) =>
+                    String(candidate.nz_bridge_number) ===
+                    String(member.nz_bridge_number)
+                )
+            )
             .slice(0, 10)
         : [];
+
+    const tournamentMatches = supabaseMatches.filter(
+      (match: any) =>
+        String(match.session_instance_id) === String(selectedSessionId)
+    );
+    const activeTournamentMatches = tournamentMatches.filter(
+      (match: any) => String(match.match_status).trim() === "Active"
+    );
+    const cancelledTournamentMatches = tournamentMatches.filter(
+      (match: any) => String(match.match_status).trim() === "Cancelled"
+    );
+    const activeTournamentMatchedPlayerNumbers = activeTournamentMatches.flatMap(
+      (match: any) => [
+        String(match.requester_nz_bridge_number),
+        String(match.partner_nz_bridge_number),
+      ]
+    );
+    const tournamentStandbyItems = directorStandbyList.map((standby: any) => ({
+      ...standby,
+      member:
+        supabaseMembers.find(
+          (member: any) =>
+            String(member.nz_bridge_number) ===
+            String(standby.nz_bridge_number)
+        ) || null,
+    }));
 
     const tournamentPairItems = supabaseTournamentPairRegistrations
       .filter(
@@ -4956,6 +5168,17 @@ React.useEffect(() => {
     const registeredTournamentPairs = tournamentPairItems.filter(
       (registration: any) =>
         String(registration.registration_status).trim() === "Registered"
+    );
+
+    const registeredTournamentPlayerNumbers = registeredTournamentPairs.flatMap(
+      (registration: any) =>
+        [
+          registration.registering_nz_bridge_number,
+          registration.partner_nz_bridge_number,
+          registration.manual_partner_nz_bridge_number,
+        ]
+          .filter(Boolean)
+          .map(String)
     );
 
     const cancelledTournamentPairs = tournamentPairItems.filter(
@@ -5086,6 +5309,425 @@ React.useEffect(() => {
               String(currentMemberTournamentMatchPartnerNumber)
           )
         : null;
+
+    const hasDirectorTournamentPartnerSearch = Boolean(
+      directorMatchPartnerSearch.trim() ||
+        directorMatchPartnerSurnameSearch.trim()
+    );
+
+    const directorTournamentPartnerFirstNameFilter =
+      directorMatchPartnerSearch.trim().toLowerCase();
+
+    const directorTournamentPartnerLastNameFilter =
+      directorMatchPartnerSurnameSearch.trim().toLowerCase();
+
+    const directorTournamentClubId = String(
+      selectedTournament.club_id || currentMember?.club_id || ""
+    );
+
+    const directorSelectedTournamentClubId =
+      directorMatchClubId || directorTournamentClubId;
+
+    const directorTournamentClubMember = supabaseMembers.find(
+      (member: any) =>
+        String(member.club_id) === directorTournamentClubId &&
+        String(member.clubs || member.club_name || "").trim()
+    );
+
+    const directorTournamentClubName = String(
+      directorTournamentClubMember?.clubs ||
+        directorTournamentClubMember?.club_name ||
+        (String(currentMember?.club_id) === directorTournamentClubId
+          ? currentMember?.clubs || currentMember?.club_name
+          : "") ||
+        "Tournament club"
+    ).trim();
+
+    const directorAvailableTournamentStandbyPartners = directorMatchRequest
+      ? directorSelectedTournamentClubId === directorTournamentClubId
+        ? directorStandbyList
+            .filter(
+              (standbyPlayer: any) =>
+                String(standbyPlayer.nz_bridge_number) !==
+                  String(directorMatchRequest.nz_bridge_number) &&
+                String(standbyPlayer.nz_bridge_number) !==
+                  String(currentMember?.nz_bridge_number) &&
+                !activeTournamentMatchedPlayerNumbers.includes(
+                  String(standbyPlayer.nz_bridge_number)
+                ) &&
+                !registeredTournamentPlayerNumbers.includes(
+                  String(standbyPlayer.nz_bridge_number)
+                ) &&
+                String(standbyPlayer.first_name || "")
+                  .toLowerCase()
+                  .includes(directorTournamentPartnerFirstNameFilter) &&
+                String(standbyPlayer.last_name || "")
+                  .toLowerCase()
+                  .includes(directorTournamentPartnerLastNameFilter)
+            )
+            .sort((firstPlayer: any, secondPlayer: any) =>
+              `${firstPlayer.first_name || ""} ${
+                firstPlayer.last_name || ""
+              }`.localeCompare(
+                `${secondPlayer.first_name || ""} ${
+                  secondPlayer.last_name || ""
+                }`
+              )
+            )
+        : []
+      : [];
+
+    const directorAvailableTournamentStandbyNumbers =
+      directorStandbyList.map((standbyPlayer: any) =>
+        String(standbyPlayer.nz_bridge_number)
+      );
+
+    const directorAvailableTournamentMemberPartners =
+      directorMatchRequest
+        ? supabaseMembers
+            .filter(
+              (member: any, index: number, members: any[]) =>
+                String(member.club_id) ===
+                  directorSelectedTournamentClubId &&
+                member.is_active !== false &&
+                String(member.nz_bridge_number) !==
+                  String(directorMatchRequest.nz_bridge_number) &&
+                String(member.nz_bridge_number) !==
+                  String(currentMember?.nz_bridge_number) &&
+                !directorAvailableTournamentStandbyNumbers.includes(
+                  String(member.nz_bridge_number)
+                ) &&
+                !activeTournamentMatchedPlayerNumbers.includes(
+                  String(member.nz_bridge_number)
+                ) &&
+                !registeredTournamentPlayerNumbers.includes(
+                  String(member.nz_bridge_number)
+                ) &&
+                String(member.first_name || "")
+                  .toLowerCase()
+                  .includes(directorTournamentPartnerFirstNameFilter) &&
+                String(member.last_name || "")
+                  .toLowerCase()
+                  .includes(directorTournamentPartnerLastNameFilter) &&
+                index ===
+                  members.findIndex(
+                    (candidate: any) =>
+                      String(candidate.nz_bridge_number) ===
+                      String(member.nz_bridge_number)
+                  )
+            )
+            .sort((firstMember: any, secondMember: any) =>
+              `${firstMember.first_name || ""} ${
+                firstMember.last_name || ""
+              }`.localeCompare(
+                `${secondMember.first_name || ""} ${
+                  secondMember.last_name || ""
+                }`
+              )
+            )
+        : [];
+
+    function resetTournamentRegistrationForm() {
+      setTournamentRegisteringPlayerSearch("");
+      setSelectedTournamentRegisteringPlayer(null);
+      setTournamentPartnerSearch("");
+      setSelectedTournamentPartner(null);
+      setUseManualTournamentPartner(false);
+      setManualTournamentPartnerFirstName("");
+      setManualTournamentPartnerLastName("");
+      setManualTournamentPartnerNzBridgeNumber("");
+      setManualTournamentPartnerClub("");
+      setManualTournamentPartnerEmail("");
+      setManualTournamentPartnerPhone("");
+    }
+
+    function openTournamentRegistrationModal() {
+      resetTournamentRegistrationForm();
+      setShowTournamentRegistrationModal(true);
+    }
+
+    function getTournamentMatchPlayers(match: any) {
+      const requester = supabaseMembers.find(
+        (member: any) =>
+          String(member.nz_bridge_number) ===
+          String(match.requester_nz_bridge_number)
+      );
+      const partner = supabaseMembers.find(
+        (member: any) =>
+          String(member.nz_bridge_number) ===
+          String(match.partner_nz_bridge_number)
+      );
+
+      return [
+        {
+          member: requester,
+          name: requester
+            ? `${requester.first_name || ""} ${requester.last_name || ""}`.trim()
+            : `NZ Bridge #${match.requester_nz_bridge_number}`,
+          nzBridgeNumber: match.requester_nz_bridge_number,
+        },
+        {
+          member: partner,
+          name: partner
+            ? `${partner.first_name || ""} ${partner.last_name || ""}`.trim()
+            : `NZ Bridge #${match.partner_nz_bridge_number}`,
+          nzBridgeNumber: match.partner_nz_bridge_number,
+        },
+      ];
+    }
+
+    function renderTournamentMatchList(
+      matches: any[],
+      emptyMessage: string,
+      activityLabel?: string
+    ) {
+      if (matches.length === 0) {
+        return <p style={styles.text}>{emptyMessage}</p>;
+      }
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {[...matches]
+            .sort((firstMatch: any, secondMatch: any) => {
+              const firstCancellationTime =
+                firstMatch.cancelled_at || firstMatch.created_at;
+
+              const secondCancellationTime =
+                secondMatch.cancelled_at || secondMatch.created_at;
+
+              return (
+                new Date(secondCancellationTime).getTime() -
+                new Date(firstCancellationTime).getTime()
+              );
+            })
+            .map((match: any) => {
+              const [firstPlayer, secondPlayer] =
+                getTournamentMatchPlayers(match);
+
+              const cancelledByMember = supabaseMembers.find(
+                (member: any) =>
+                  String(member.nz_bridge_number) ===
+                  String(match.cancelled_by_nz_bridge_number)
+              );
+
+              const cancelledByName = cancelledByMember
+                ? `${cancelledByMember.first_name || ""} ${
+                    cancelledByMember.last_name || ""
+                  }`.trim()
+                : match.cancelled_by_nz_bridge_number
+                  ? `NZ Bridge #${match.cancelled_by_nz_bridge_number}`
+                  : "Not recorded";
+
+              return (
+                <div
+                  key={match.match_id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: activityLabel
+                      ? "1fr 180px"
+                      : "1fr 140px 140px",
+                    gap: "16px",
+                    alignItems: "start",
+                    marginBottom: activityLabel ? "16px" : 0,
+                  }}
+                >
+                  <div style={styles.lookingPlayerCard}>
+                    <div style={{ fontSize: "16px" }}>
+                      {renderTournamentRegistrationPlayerName(
+                        firstPlayer.member,
+                        firstPlayer.name,
+                        firstPlayer.nzBridgeNumber
+                      )}
+                      {" with "}
+                      {renderTournamentRegistrationPlayerName(
+                        secondPlayer.member,
+                        secondPlayer.name,
+                        secondPlayer.nzBridgeNumber
+                      )}
+                    </div>
+
+                    {activityLabel && (
+                      <div
+                        style={{
+                          color: "#475569",
+                          fontSize: "12px",
+                          marginTop: "8px",
+                        }}
+                      >
+                        <div>{activityLabel}</div>
+
+                        <div style={{ marginTop: "3px" }}>
+                          Cancelled by:{" "}
+                          {match.cancelled_by_role === "Director"
+                            ? `Director — ${cancelledByName}`
+                            : cancelledByName}
+                        </div>
+
+                        {match.note && (
+                          <div style={{ marginTop: "3px" }}>
+                            Reason: {match.note}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {activityLabel ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        minWidth: "180px",
+                      }}
+                    >
+                      {match.cancelled_at && (
+                        <div
+                          style={{
+                            color: "#64748b",
+                            fontSize: "12px",
+                            whiteSpace: "nowrap",
+                            textAlign: "right",
+                          }}
+                        >
+                          {new Date(match.cancelled_at).toLocaleString(
+                            "en-NZ",
+                            {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            }
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : isCurrentUserDirector ? (
+                    <>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          style={styles.matchButton}
+                          onClick={() => {
+                            // TODO: Register Pair
+                          }}
+                        >
+                          Register Pair
+                        </button>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          style={styles.matchButton}
+                          onClick={() => {
+                            setMatchToCancel(match);
+                            setMatchCancelReason("");
+                          }}
+                        >
+                          Cancel Match
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              );
+            })}
+        </div>
+      );
+    }
+
+    function renderTournamentStandbyList() {
+      if (tournamentStandbyItems.length === 0) {
+        return <p style={styles.text}>No players are currently on standby.</p>;
+      }
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {tournamentStandbyItems.map((standby: any) => {
+            const playerName = standby.member
+              ? `${standby.member.first_name || ""} ${
+                  standby.member.last_name || ""
+                }`.trim()
+              : `${standby.first_name || ""} ${standby.last_name || ""}`.trim() ||
+                `NZ Bridge #${standby.nz_bridge_number}`;
+            const playingLevels = Array.isArray(standby.playing_level_ids)
+              ? standby.playing_level_ids
+                  .map(
+                    (levelId: any) =>
+                      supabaseLevels.find(
+                        (level: any) =>
+                          Number(level.level_id) === Number(levelId)
+                      )?.level_name
+                  )
+                  .filter(Boolean)
+                  .join(", ")
+              : "";
+            const systems = Array.isArray(standby.system_ids)
+              ? standby.system_ids
+                  .map(
+                    (systemId: any) =>
+                      supabaseSystems.find(
+                        (system: any) =>
+                          Number(system.system_id) === Number(systemId)
+                      )?.system_name
+                  )
+                  .filter(Boolean)
+                  .join(", ")
+              : "";
+
+            return (
+              <div
+                key={standby.standby_id}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "12px",
+                  background: "#f8fafc",
+                  padding: "14px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: "16px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "16px" }}>
+                    {renderTournamentRegistrationPlayerName(
+                      standby.member,
+                      playerName,
+                      standby.nz_bridge_number
+                    )}
+                  </div>
+                  {(playingLevels || systems) && (
+                    <div style={{ ...styles.smallText, marginTop: "6px" }}>
+                      {[playingLevels, systems].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                  {standby.phone && (
+                    <div style={{ ...styles.smallText, marginTop: "4px" }}>
+                      Phone: {standby.phone}
+                    </div>
+                  )}
+                </div>
+                <div style={{ color: "#0f766e", fontSize: "13px", fontWeight: 700 }}>
+                  {standby.standby_status || "Available"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
 
     async function cancelCurrentMemberTournamentRegistration() {
       if (
@@ -5485,6 +6127,7 @@ React.useEffect(() => {
       nzBridgeNumber: any
     ) {
       const isCurrentMember =
+        !isCurrentUserDirector &&
         String(nzBridgeNumber) === String(currentMember?.nz_bridge_number);
       const canOpenProfile = !!member && !isCurrentMember;
 
@@ -5541,7 +6184,11 @@ React.useEffect(() => {
           )[1]
         : null;
 
-    function renderTournamentPairList(pairs: any[], emptyMessage: string) {
+    function renderTournamentPairList(
+      pairs: any[],
+      emptyMessage: string,
+      activityLabel?: string
+    ) {
       if (pairs.length === 0) {
         return <p style={styles.text}>{emptyMessage}</p>;
       }
@@ -5613,44 +6260,169 @@ React.useEffect(() => {
               <div
                 key={registration.registration_id}
                 style={{
-                  border: "1px solid #cbd5e1",
-                  borderRadius: "12px",
-                  background: "#f8fafc",
-                  padding: "14px",
-                  display: "flex",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 180px",
+                  gap: "16px",
                   alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                  flexWrap: "wrap",
+                  marginBottom: "16px",
                 }}
               >
-                <div style={{ fontSize: "16px", fontWeight: 400 }}>
-                  {renderTournamentRegistrationPlayerName(
-                    firstPlayer.member,
-                    firstPlayer.name,
-                    firstPlayer.nzBridgeNumber
-                  )}
-                  {" & "}
-                  {renderTournamentRegistrationPlayerName(
-                    secondPlayer.member,
-                    secondPlayer.name,
-                    secondPlayer.nzBridgeNumber
-                  )}
+                <div style={styles.lookingPlayerCard}>
+                  <div style={{ fontSize: "16px" }}>
+                    {renderTournamentRegistrationPlayerName(
+                      firstPlayer.member,
+                      firstPlayer.name,
+                      firstPlayer.nzBridgeNumber
+                    )}
+                    {" with "}
+                    {renderTournamentRegistrationPlayerName(
+                      secondPlayer.member,
+                      secondPlayer.name,
+                      secondPlayer.nzBridgeNumber
+                    )}
+                  </div>
+
+                  {activityLabel &&
+                    (() => {
+                      const cancelledByMember = supabaseMembers.find(
+                        (member: any) =>
+                          String(member.nz_bridge_number) ===
+                          String(
+                            registration.cancelled_by_nz_bridge_number
+                          )
+                      );
+
+                      const cancelledByName = cancelledByMember
+                        ? `${cancelledByMember.first_name || ""} ${
+                            cancelledByMember.last_name || ""
+                          }`.trim()
+                        : registration.cancelled_by_nz_bridge_number
+                          ? `NZ Bridge #${registration.cancelled_by_nz_bridge_number}`
+                          : "Not recorded";
+
+                      return (
+                        <div
+                          style={{
+                            color: "#475569",
+                            fontSize: "12px",
+                            marginTop: "8px",
+                          }}
+                        >
+                          <div>{activityLabel}</div>
+
+                          <div style={{ marginTop: "3px" }}>
+                            Cancelled by:{" "}
+                            {registration.cancelled_by_role === "Director"
+                              ? `Director — ${cancelledByName}`
+                              : cancelledByName}
+                          </div>
+
+                          {registration.cancellation_reason && (
+                            <div style={{ marginTop: "3px" }}>
+                              Reason: {registration.cancellation_reason}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                 </div>
 
                 <div
                   style={{
-                    color: "#64748b",
-                    fontSize: "13px",
-                    whiteSpace: "nowrap",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "flex-end",
+                    minWidth: "180px",
                   }}
                 >
-                  {new Date(registration.created_at).toLocaleString("en-NZ", {
-                    day: "numeric",
-                    month: "short",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
+                  {activityLabel ? (
+                    registration.cancelled_at ? (
+                      <div
+                        style={{
+                          color: "#64748b",
+                          fontSize: "12px",
+                          whiteSpace: "nowrap",
+                          textAlign: "right",
+                        }}
+                      >
+                        {new Date(
+                          registration.cancelled_at
+                        ).toLocaleString("en-NZ", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                    ) : null
+                  ) : isCurrentUserDirector ? (
+                    <button
+                      type="button"
+                      disabled={
+                        cancellingTournamentRegistrationId ===
+                        Number(registration.registration_id)
+                      }
+                      onClick={async () => {
+                        const confirmed = window.confirm(
+                          "Are you sure you want to cancel this tournament registration? This will cancel the pair for both players."
+                        );
+
+                        if (!confirmed) return;
+
+                        const registrationId = Number(
+                          registration.registration_id
+                        );
+
+                        setCancellingTournamentRegistrationId(registrationId);
+
+                        const { error } = await supabase.rpc(
+                          "cancel_tournament_pair",
+                          {
+                            p_registration_id: registrationId,
+                            p_cancelling_nz_bridge_number: Number(
+                              currentMember.nz_bridge_number
+                            ),
+                          }
+                        );
+
+                        if (error) {
+                          console.error(
+                            "Director tournament registration cancellation error:",
+                            JSON.stringify(error, null, 2)
+                          );
+                          alert(
+                            `Registration could not be cancelled: ${
+                              error.message || "Unknown Supabase error"
+                            }`
+                          );
+                          setCancellingTournamentRegistrationId(null);
+                          return;
+                        }
+
+                        await refreshSupabaseData();
+                        setCancellingTournamentRegistrationId(null);
+                      }}
+                      style={{
+                        ...styles.matchButton,
+                        opacity:
+                          cancellingTournamentRegistrationId ===
+                          Number(registration.registration_id)
+                            ? 0.65
+                            : 1,
+                        cursor:
+                          cancellingTournamentRegistrationId ===
+                          Number(registration.registration_id)
+                            ? "not-allowed"
+                            : "pointer",
+                      }}
+                    >
+                      {cancellingTournamentRegistrationId ===
+                      Number(registration.registration_id)
+                        ? "Cancelling..."
+                        : "Cancel Registration"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             );
@@ -5719,44 +6491,25 @@ React.useEffect(() => {
             />
           )}
 
-          {isCurrentUserDirector && (
-            <div style={{ marginBottom: "24px" }}>
-            <Button
-              onClick={() => {
-                if (
-                  sessionReturnView === "sessions" ||
-                  sessionReturnView === "mySessions"
-                ) {
-                  setScrollToSessionId(selectedSessionId);
-                } else {
-                  setScrollToSessionId(null);
-                }
-                setView(sessionReturnView);
-              }}
-            >
-              ← Back
-            </Button>
-            </div>
-          )}
-
           <div style={styles.detailTabBar}>
-            {["My Status", "Registered", "Looking", "Cancelled"].map(
-              (filterName) => (
+          {(isCurrentUserDirector
+            ? ["Looking", "Registered", "Matched", "Cancelled", "Standby"]
+            : ["My Status", "Registered", "Looking", "Cancelled"]
+            ).map((filterName) => (
                 <button
                   key={filterName}
                   type="button"
                   onClick={() => setTournamentDetailFilter(filterName)}
                   style={{
                     ...styles.detailTab,
-                    ...(tournamentDetailFilter === filterName
+                    ...(displayedTournamentDetailFilter === filterName
                       ? styles.detailTabActive
                       : {}),
                   }}
                 >
                   {filterName}
                 </button>
-              )
-            )}
+              ))}
           </div>
 
           <Card>
@@ -5812,7 +6565,8 @@ React.useEffect(() => {
               </span>
             </div>
 
-            {tournamentDetailFilter === "My Status" && (
+            {!isCurrentUserDirector &&
+              displayedTournamentDetailFilter === "My Status" && (
               <div>
                 {currentMemberTournamentRegistration ? (
                   <>
@@ -5984,11 +6738,7 @@ React.useEffect(() => {
 
                     <button
                       type="button"
-                      onClick={() => {
-                        setWantedLevel("");
-                        setWantedSystems([]);
-                        setShowRequestTypeModal(true);
-                      }}
+                      onClick={openNewLookingRequestModal}
                       style={{
                         ...styles.matchButton,
                         background: "#267c89",
@@ -6000,14 +6750,7 @@ React.useEffect(() => {
 
                     <button
                       type="button"
-                      onClick={() => {
-                        setStandbyPhone(currentMember?.phone || "");
-                        setStandbyLevelIds([]);
-                        setStandbySystemIds([]);
-                        setStandbyUpdateProfile(true);
-                        setStandbyNote("");
-                        setShowStandbyModal(true);
-                      }}
+                      onClick={openNewStandbyModal}
                       style={{
                         ...styles.matchButton,
                         background: "#267c89",
@@ -6021,12 +6764,13 @@ React.useEffect(() => {
               </div>
             )}
 
-            {tournamentDetailFilter === "Registered" && (
+            {displayedTournamentDetailFilter === "Registered" && (
               <>
                 <div
                   style={{
                     display: "flex",
-                    justifyContent: currentMemberTournamentRegistration
+                    justifyContent:
+                      isCurrentUserDirector || currentMemberTournamentRegistration
                       ? "space-between"
                       : "flex-end",
                     alignItems: "center",
@@ -6035,7 +6779,22 @@ React.useEffect(() => {
                     marginBottom: "18px",
                   }}
                 >
-                  {currentMemberTournamentRegistration && (
+                  {isCurrentUserDirector && (
+                    <button
+                      type="button"
+                      onClick={openTournamentRegistrationModal}
+                      style={{
+                        ...styles.matchButton,
+                        background: "#267c89",
+                        color: "white",
+                      }}
+                    >
+                      Register Pair
+                    </button>
+                  )}
+
+                  {!isCurrentUserDirector &&
+                    currentMemberTournamentRegistration && (
                     <button
                       type="button"
                       disabled={
@@ -6082,8 +6841,9 @@ React.useEffect(() => {
               </>
             )}
 
-            {tournamentDetailFilter === "Looking" && (
+            {displayedTournamentDetailFilter === "Looking" && (
               <>
+
                 {tournamentLookingRequests.length === 0 ? (
                   <p style={styles.text}>
                     No players are looking for a partner yet.
@@ -6105,6 +6865,13 @@ React.useEffect(() => {
                       const isOwnRequest =
                         String(request.nz_bridge_number) ===
                         String(currentMember?.nz_bridge_number);
+                      const requestPlayerAlreadyAssigned =
+                        activeTournamentMatchedPlayerNumbers.includes(
+                          String(request.nz_bridge_number)
+                        ) ||
+                        registeredTournamentPlayerNumbers.includes(
+                          String(request.nz_bridge_number)
+                        );
                       const requestHasAnyInterest = supabaseInterests.some(
                         (interest: any) =>
                           Number(interest.request_id) ===
@@ -6166,13 +6933,15 @@ React.useEffect(() => {
                               </div>
                             </div>
 
-                            {renderVisiblePlayerCardDetails(
-                              request.nz_bridge_number
-                            )}
+                            {!isOwnRequest &&
+                              !isCurrentUserDirector &&
+                              renderVisiblePlayerCardDetails(
+                                request.nz_bridge_number
+                              )}
 
                             {renderLookingPreferences(request)}
 
-                            {isOwnRequest && (
+                            {isOwnRequest && !isCurrentUserDirector && (
                               <div style={{ marginTop: "16px" }}>
                                 {pendingInterestedPlayers.length === 0 ? (
                                   <div style={styles.smallText}>
@@ -6250,7 +7019,36 @@ React.useEffect(() => {
                               minWidth: "180px",
                             }}
                           >
-                            {isOwnRequest ? (
+                            {isCurrentUserDirector &&
+                            requestPlayerAlreadyAssigned ? (
+                              <div
+                                style={{
+                                  color: "#64748b",
+                                  fontSize: "13px",
+                                  fontWeight: 700,
+                                  textAlign: "right",
+                                }}
+                              >
+                                Already assigned
+                              </div>
+                            ) : isCurrentUserDirector ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDirectorMatchRequest({
+                                    ...request,
+                                    first_name: request.member?.first_name,
+                                    last_name: request.member?.last_name,
+                                  });
+                                  setDirectorMatchPartnerNumber("");
+                                  setDirectorMatchStandbyId(null);
+                                  setDirectorMatchNote("");
+                                }}
+                                style={styles.compactPrimaryAction}
+                              >
+                                Create Match
+                              </button>
+                            ) : isOwnRequest ? (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -6324,10 +7122,83 @@ React.useEffect(() => {
               </>
             )}
 
-            {tournamentDetailFilter === "Cancelled" && (
-              renderTournamentPairList(
-                cancelledTournamentPairs,
-                "No cancelled registrations."
+            {isCurrentUserDirector &&
+              displayedTournamentDetailFilter === "Matched" &&
+              renderTournamentMatchList(
+                activeTournamentMatches,
+                "No tournament matches have been created yet."
+              )}
+
+            {isCurrentUserDirector &&
+              displayedTournamentDetailFilter === "Standby" &&
+              renderTournamentStandbyList()}
+
+            {displayedTournamentDetailFilter === "Cancelled" && (
+              isCurrentUserDirector ? (
+                cancelledTournamentPairs.length === 0 &&
+                cancelledTournamentMatches.length === 0 ? (
+                  <p style={styles.text}>No cancelled tournament activity.</p>
+                ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                    }}
+                  >
+                    {[
+                      ...cancelledTournamentPairs.map(
+                        (registration: any) => ({
+                          activityType: "registration",
+                          record: registration,
+                          cancelledAt:
+                            registration.cancelled_at ||
+                            registration.created_at,
+                        })
+                      ),
+                      ...cancelledTournamentMatches.map((match: any) => ({
+                        activityType: "match",
+                        record: match,
+                        cancelledAt:
+                          match.cancelled_at || match.created_at,
+                      })),
+                    ]
+                      .sort(
+                        (firstActivity: any, secondActivity: any) =>
+                          new Date(secondActivity.cancelledAt).getTime() -
+                          new Date(firstActivity.cancelledAt).getTime()
+                      )
+                      .map((activity: any) =>
+                        activity.activityType === "registration" ? (
+                          <React.Fragment
+                            key={`registration-${activity.record.registration_id}`}
+                          >
+                            {renderTournamentPairList(
+                              [activity.record],
+                              "",
+                              "Cancelled registration"
+                            )}
+                          </React.Fragment>
+                        ) : (
+                          <React.Fragment
+                            key={`match-${activity.record.match_id}`}
+                          >
+                            {renderTournamentMatchList(
+                              [activity.record],
+                              "",
+                              "Cancelled match"
+                            )}
+                          </React.Fragment>
+                        )
+                      )}
+                  </div>
+                )
+              ) : (
+                renderTournamentPairList(
+                  cancelledTournamentPairs,
+                  "No cancelled registrations.",
+                  "Cancelled registration"
+                )
               )
             )}
           </Card>
@@ -6368,7 +7239,9 @@ React.useEffect(() => {
                 </h2>
 
                 <p style={{ ...styles.smallText, marginBottom: "20px" }}>
-                  Preferences are optional.
+                  Preferences are optional. Your saved playing levels and
+                  systems have been selected as a starting point; change or
+                  clear them for this request if needed.
                 </p>
 
                 <label
@@ -6866,7 +7739,9 @@ React.useEffect(() => {
 
                 <p style={styles.text}>
                   Your details will only be visible to club directors. Other
-                  players cannot see the standby list.
+                  players cannot see the standby list. Available details from
+                  My Account have been filled in and can be changed for this
+                  session.
                 </p>
 
                 <label
@@ -7080,6 +7955,411 @@ React.useEffect(() => {
             </div>
           )}
 
+          {directorMatchRequest && isCurrentUserDirector && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(15, 23, 42, 0.45)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1200,
+                padding: "24px",
+                overflowY: "auto",
+              }}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="director-tournament-match-title"
+                style={{
+                  background: "white",
+                  borderRadius: "20px",
+                  padding: "32px",
+                  width: "100%",
+                  maxWidth: "520px",
+                  maxHeight: "90vh",
+                  overflowY: "auto",
+                  boxShadow: "0 24px 80px rgba(15, 23, 42, 0.25)",
+                }}
+              >
+                <h2
+                  id="director-tournament-match-title"
+                  style={styles.sectionTitle}
+                >
+                  Create match
+                </h2>
+
+                <p style={styles.text}>
+                  Match{" "}
+                  <strong>
+                    {directorMatchRequest.first_name || "Unknown"}{" "}
+                    {directorMatchRequest.last_name || "player"}
+                  </strong>{" "}
+                  with a confirmed partner.
+                </p>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: "12px",
+                    marginTop: "20px",
+                    marginBottom: "16px",
+                  }}
+                >
+                  <label
+                    htmlFor="director-tournament-partner-first-name"
+                    style={{ fontSize: "15px", fontWeight: 700 }}
+                  >
+                    First name
+                    <input
+                      id="director-tournament-partner-first-name"
+                      type="search"
+                      value={directorMatchPartnerSearch}
+                      onChange={(event) => {
+                        setDirectorMatchPartnerSearch(event.target.value);
+                        setDirectorMatchPartnerNumber("");
+                        setDirectorMatchStandbyId(null);
+                      }}
+                      placeholder="First name"
+                      autoComplete="off"
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "12px",
+                        borderRadius: "12px",
+                        border: "1px solid #cbd5e1",
+                        marginTop: "8px",
+                        fontSize: "15px",
+                        fontWeight: 400,
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </label>
+
+                  <label
+                    htmlFor="director-tournament-partner-last-name"
+                    style={{ fontSize: "15px", fontWeight: 700 }}
+                  >
+                    Last name
+                    <input
+                      id="director-tournament-partner-last-name"
+                      type="search"
+                      value={directorMatchPartnerSurnameSearch}
+                      onChange={(event) => {
+                        setDirectorMatchPartnerSurnameSearch(event.target.value);
+                        setDirectorMatchPartnerNumber("");
+                        setDirectorMatchStandbyId(null);
+                      }}
+                      placeholder="Last name"
+                      autoComplete="off"
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "12px",
+                        borderRadius: "12px",
+                        border: "1px solid #cbd5e1",
+                        marginTop: "8px",
+                        fontSize: "15px",
+                        fontWeight: 400,
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </label>
+
+                  <label
+                    htmlFor="director-tournament-partner-club"
+                    style={{ fontSize: "15px", fontWeight: 700 }}
+                  >
+                    Club
+                    <select
+                      id="director-tournament-partner-club"
+                      value={directorSelectedTournamentClubId}
+                      onChange={(event) => {
+                        setDirectorMatchClubId(event.target.value);
+                        setDirectorMatchPartnerNumber("");
+                        setDirectorMatchStandbyId(null);
+                      }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "12px",
+                        borderRadius: "12px",
+                        border: "1px solid #cbd5e1",
+                        marginTop: "8px",
+                        fontSize: "15px",
+                        fontWeight: 400,
+                        boxSizing: "border-box",
+                        background: "white",
+                      }}
+                    >
+                      <option value={directorTournamentClubId}>
+                        {directorTournamentClubName}
+                      </option>
+                    </select>
+                  </label>
+                </div>
+
+                <div style={{ marginBottom: "18px" }}>
+                  <div
+                    style={{
+                      marginBottom: "8px",
+                      fontSize: "16px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Available players
+                  </div>
+
+                  {directorAvailableTournamentStandbyPartners.length === 0 &&
+                  directorAvailableTournamentMemberPartners.length === 0 ? (
+                    <p style={{ ...styles.smallText, margin: 0 }}>
+                      {hasDirectorTournamentPartnerSearch
+                        ? "No available players match your search."
+                        : "No available players for this tournament."}
+                    </p>
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                        maxHeight: "280px",
+                        overflowY: "auto",
+                        paddingRight: "4px",
+                      }}
+                    >
+                      {directorAvailableTournamentStandbyPartners.map(
+                        (standbyPlayer: any) => {
+                          const isSelected =
+                            Number(directorMatchStandbyId) ===
+                            Number(standbyPlayer.standby_id);
+
+                          return (
+                            <button
+                              key={`tournament-standby-result-${standbyPlayer.standby_id}`}
+                              type="button"
+                              aria-pressed={isSelected}
+                              onClick={() => {
+                                setDirectorMatchStandbyId(
+                                  Number(standbyPlayer.standby_id)
+                                );
+                                setDirectorMatchPartnerNumber(
+                                  String(standbyPlayer.nz_bridge_number)
+                                );
+                              }}
+                              style={{
+                                width: "100%",
+                                border: isSelected
+                                  ? "2px solid #2b8792"
+                                  : "1px solid #cbd5e1",
+                                borderRadius: "12px",
+                                background: isSelected ? "#e0f2f4" : "#f8fafc",
+                                color: "#0f172a",
+                                padding: "12px 14px",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: "12px",
+                                textAlign: "left",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <span style={{ fontWeight: 700 }}>
+                                {standbyPlayer.first_name || "Unknown"}{" "}
+                                {standbyPlayer.last_name || "player"}
+                              </span>
+
+                              <span
+                                style={{
+                                  color: "#0f766e",
+                                  fontSize: "12px",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                Standby
+                              </span>
+                            </button>
+                          );
+                        }
+                      )}
+
+                      {directorAvailableTournamentMemberPartners.map((member: any) => {
+                        const isSelected =
+                          !directorMatchStandbyId &&
+                          String(directorMatchPartnerNumber) ===
+                            String(member.nz_bridge_number);
+
+                        return (
+                          <button
+                            key={`tournament-member-result-${member.nz_bridge_number}`}
+                            type="button"
+                            aria-pressed={isSelected}
+                            onClick={() => {
+                              setDirectorMatchStandbyId(null);
+                              setDirectorMatchPartnerNumber(
+                                String(member.nz_bridge_number)
+                              );
+                            }}
+                            style={{
+                              width: "100%",
+                              border: isSelected
+                                ? "2px solid #2b8792"
+                                : "1px solid #cbd5e1",
+                              borderRadius: "12px",
+                              background: isSelected ? "#e0f2f4" : "#f8fafc",
+                              color: "#0f172a",
+                              padding: "12px 14px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "12px",
+                              textAlign: "left",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <span style={{ fontWeight: 700 }}>
+                              {member.first_name || "Unknown"}{" "}
+                              {member.last_name || "player"}
+                            </span>
+
+                            <span style={{ color: "#64748b", fontSize: "12px" }}>
+                              NZ Bridge #{member.nz_bridge_number}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <label
+                  htmlFor="director-tournament-match-note"
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "15px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Optional note
+                </label>
+
+                <textarea
+                  id="director-tournament-match-note"
+                  value={directorMatchNote}
+                  onChange={(event) =>
+                    setDirectorMatchNote(event.target.value)
+                  }
+                  placeholder="For example: Confirmed by phone"
+                  style={{
+                    width: "100%",
+                    minHeight: "90px",
+                    padding: "12px",
+                    borderRadius: "12px",
+                    border: "1px solid #cbd5e1",
+                    marginBottom: "24px",
+                    fontSize: "15px",
+                    boxSizing: "border-box",
+                  }}
+                />
+
+                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (
+                        !selectedSessionId ||
+                        !currentMember?.nz_bridge_number ||
+                        !directorMatchRequest?.request_id
+                      ) {
+                        alert(
+                          "The selected tournament or looking request is missing."
+                        );
+                        return;
+                      }
+
+                      if (!directorMatchPartnerNumber) {
+                        alert("Please select a partner.");
+                        return;
+                      }
+
+                      const {
+                        data: createdMatchId,
+                        error: createDirectorMatchError,
+                      } = await supabase.rpc("director_create_match", {
+                        p_session_instance_id: selectedSessionId,
+                        p_director_nz_bridge_number: Number(
+                          currentMember.nz_bridge_number
+                        ),
+                        p_request_id: Number(
+                          directorMatchRequest.request_id
+                        ),
+                        p_partner_nz_bridge_number: Number(
+                          directorMatchPartnerNumber
+                        ),
+                        p_standby_id: directorMatchStandbyId
+                          ? Number(directorMatchStandbyId)
+                          : null,
+                        p_note: directorMatchNote.trim() || null,
+                      });
+
+                      if (createDirectorMatchError) {
+                        console.error(
+                          "Director tournament create match error:",
+                          JSON.stringify(createDirectorMatchError, null, 2)
+                        );
+                        alert(
+                          createDirectorMatchError.message ||
+                            "The match could not be created."
+                        );
+                        return;
+                      }
+
+                      if (!createdMatchId) {
+                        alert("The match was not created.");
+                        return;
+                      }
+
+                      await refreshSupabaseData();
+                      setDirectorMatchRequest(null);
+                      setDirectorMatchPartnerNumber("");
+                      setDirectorMatchStandbyId(null);
+                      setDirectorMatchNote("");
+                      setTournamentDetailFilter("Matched");
+                    }}
+                    style={{
+                      ...styles.matchButton,
+                      background: "#267c89",
+                      color: "white",
+                    }}
+                  >
+                    Confirm Match
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDirectorMatchRequest(null);
+                      setDirectorMatchPartnerNumber("");
+                      setDirectorMatchStandbyId(null);
+                      setDirectorMatchNote("");
+                    }}
+                    style={{
+                      ...styles.matchButton,
+                      background: "#267c89",
+                      color: "white",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {showTournamentRegistrationModal && (
             <div
               style={{
@@ -7118,12 +8398,133 @@ React.useEffect(() => {
                   Register pair
                 </h2>
 
+                {isCurrentUserDirector && (
+                  <div style={{ marginTop: "20px" }}>
+                    <label
+                      htmlFor="tournament-registering-player-search"
+                      style={{
+                        display: "block",
+                        marginBottom: "8px",
+                        fontSize: "15px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      First player
+                    </label>
+
+                    <input
+                      id="tournament-registering-player-search"
+                      type="search"
+                      value={tournamentRegisteringPlayerSearch}
+                      onChange={(event) => {
+                        setTournamentRegisteringPlayerSearch(
+                          event.target.value
+                        );
+                        setSelectedTournamentRegisteringPlayer(null);
+                        setSelectedTournamentPartner(null);
+                      }}
+                      placeholder="Search by name or NZ Bridge number"
+                      autoComplete="off"
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        borderRadius: "12px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "15px",
+                        boxSizing: "border-box",
+                      }}
+                    />
+
+                    {tournamentRegisteringPlayerSearch.trim().length >= 2 &&
+                      tournamentRegisteringPlayerMatches.length === 0 && (
+                        <p style={{ ...styles.smallText, marginTop: "12px" }}>
+                          No BridgeBuddy players found.
+                        </p>
+                      )}
+
+                    {tournamentRegisteringPlayerMatches.length > 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "8px",
+                          marginTop: "12px",
+                        }}
+                      >
+                        {tournamentRegisteringPlayerMatches.map(
+                          (member: any) => {
+                            const isSelected =
+                              String(
+                                selectedTournamentRegisteringPlayer?.nz_bridge_number
+                              ) === String(member.nz_bridge_number);
+
+                            return (
+                              <button
+                                key={`registering-${member.nz_bridge_number}`}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTournamentRegisteringPlayer(
+                                    member
+                                  );
+                                  setTournamentRegisteringPlayerSearch(
+                                    `${member.first_name || ""} ${
+                                      member.last_name || ""
+                                    }`.trim()
+                                  );
+                                  setSelectedTournamentPartner(null);
+                                  setTournamentPartnerSearch("");
+                                }}
+                                style={{
+                                  width: "100%",
+                                  border: isSelected
+                                    ? "2px solid #2b8792"
+                                    : "1px solid #cbd5e1",
+                                  borderRadius: "12px",
+                                  background: isSelected
+                                    ? "#e0f2f4"
+                                    : "white",
+                                  color: "#0f172a",
+                                  padding: "12px",
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <span
+                                  style={{ display: "block", fontWeight: 700 }}
+                                >
+                                  {member.first_name} {member.last_name}
+                                </span>
+                                <span style={styles.smallText}>
+                                  NZ Bridge number: {member.nz_bridge_number}
+                                </span>
+                              </button>
+                            );
+                          }
+                        )}
+                      </div>
+                    )}
+
+                    {selectedTournamentRegisteringPlayer && (
+                      <div
+                        style={{
+                          marginTop: "12px",
+                          color: "#0f766e",
+                          fontSize: "13px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        First player selected
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div
                   style={{
                     display: "grid",
                     gridTemplateColumns: "1fr 1fr",
                     gap: "8px",
-                    marginTop: "20px",
+                    marginTop: isCurrentUserDirector ? "24px" : "20px",
                   }}
                 >
                   <button
@@ -7377,6 +8778,14 @@ React.useEffect(() => {
                       }
 
                       if (
+                        isCurrentUserDirector &&
+                        !selectedTournamentRegisteringPlayer?.nz_bridge_number
+                      ) {
+                        alert("Please select the first player.");
+                        return;
+                      }
+
+                      if (
                         !useManualTournamentPartner &&
                         !selectedTournamentPartner?.nz_bridge_number
                       ) {
@@ -7411,44 +8820,64 @@ React.useEffect(() => {
                       setIsTournamentRegistrationSubmitting(true);
 
                       try {
+                        const partnerArguments = {
+                          p_partner_nz_bridge_number:
+                            useManualTournamentPartner
+                              ? null
+                              : Number(
+                                  selectedTournamentPartner.nz_bridge_number
+                                ),
+                          p_manual_partner_first_name:
+                            useManualTournamentPartner
+                              ? manualFirstName
+                              : null,
+                          p_manual_partner_last_name:
+                            useManualTournamentPartner
+                              ? manualLastName
+                              : null,
+                          p_manual_partner_nz_bridge_number:
+                            useManualTournamentPartner && manualNzBridgeNumber
+                              ? Number(manualNzBridgeNumber)
+                              : null,
+                          p_manual_partner_club:
+                            useManualTournamentPartner
+                              ? manualTournamentPartnerClub.trim() || null
+                              : null,
+                          p_manual_partner_email:
+                            useManualTournamentPartner
+                              ? manualTournamentPartnerEmail.trim() || null
+                              : null,
+                          p_manual_partner_phone:
+                            useManualTournamentPartner
+                              ? manualTournamentPartnerPhone.trim() || null
+                              : null,
+                        };
                         const { error: registrationError } = await supabase.rpc(
-                          "register_tournament_pair",
-                          {
-                            p_session_instance_id: String(selectedSessionId),
-                            p_registering_nz_bridge_number: Number(
-                              currentMember.nz_bridge_number
-                            ),
-                            p_partner_nz_bridge_number:
-                              useManualTournamentPartner
-                                ? null
-                                : Number(
-                                    selectedTournamentPartner.nz_bridge_number
-                                  ),
-                            p_manual_partner_first_name:
-                              useManualTournamentPartner
-                                ? manualFirstName
-                                : null,
-                            p_manual_partner_last_name:
-                              useManualTournamentPartner
-                                ? manualLastName
-                                : null,
-                            p_manual_partner_nz_bridge_number:
-                              useManualTournamentPartner && manualNzBridgeNumber
-                                ? Number(manualNzBridgeNumber)
-                                : null,
-                            p_manual_partner_club:
-                              useManualTournamentPartner
-                                ? manualTournamentPartnerClub.trim() || null
-                                : null,
-                            p_manual_partner_email:
-                              useManualTournamentPartner
-                                ? manualTournamentPartnerEmail.trim() || null
-                                : null,
-                            p_manual_partner_phone:
-                              useManualTournamentPartner
-                                ? manualTournamentPartnerPhone.trim() || null
-                                : null,
-                          }
+                          isCurrentUserDirector
+                            ? "director_register_tournament_pair"
+                            : "register_tournament_pair",
+                          isCurrentUserDirector
+                            ? {
+                                p_session_instance_id: String(
+                                  selectedSessionId
+                                ),
+                                p_director_nz_bridge_number: Number(
+                                  currentMember.nz_bridge_number
+                                ),
+                                p_player_one_nz_bridge_number: Number(
+                                  selectedTournamentRegisteringPlayer.nz_bridge_number
+                                ),
+                                ...partnerArguments,
+                              }
+                            : {
+                                p_session_instance_id: String(
+                                  selectedSessionId
+                                ),
+                                p_registering_nz_bridge_number: Number(
+                                  currentMember.nz_bridge_number
+                                ),
+                                ...partnerArguments,
+                              }
                         );
 
                         if (registrationError) {
@@ -7466,15 +8895,7 @@ React.useEffect(() => {
 
                         await refreshSupabaseData();
                         setShowTournamentRegistrationModal(false);
-                        setTournamentPartnerSearch("");
-                        setSelectedTournamentPartner(null);
-                        setUseManualTournamentPartner(false);
-                        setManualTournamentPartnerFirstName("");
-                        setManualTournamentPartnerLastName("");
-                        setManualTournamentPartnerNzBridgeNumber("");
-                        setManualTournamentPartnerClub("");
-                        setManualTournamentPartnerEmail("");
-                        setManualTournamentPartnerPhone("");
+                        resetTournamentRegistrationForm();
                         setTournamentDetailFilter("Registered");
                         alert("Pair registered successfully.");
                       } catch (registrationException) {
@@ -7504,9 +8925,7 @@ React.useEffect(() => {
                     secondary={true}
                     onClick={() => {
                       setShowTournamentRegistrationModal(false);
-                      setTournamentPartnerSearch("");
-                      setSelectedTournamentPartner(null);
-                      setUseManualTournamentPartner(false);
+                      resetTournamentRegistrationForm();
                     }}
                   >
                     Cancel
@@ -7691,8 +9110,140 @@ React.useEffect(() => {
         return Number(bIncludesCurrentMember) - Number(aIncludesCurrentMember);
       });
 
-    const currentMemberIsMatchedInSessionDetail =
-      !!currentMemberActiveMatchForSelectedSession;
+    const hasDirectorPartnerSearch = Boolean(
+      directorMatchPartnerSearch.trim() ||
+        directorMatchPartnerSurnameSearch.trim()
+    );
+    const directorPartnerFirstNameFilter =
+      directorMatchPartnerSearch.trim().toLowerCase();
+    const directorPartnerLastNameFilter =
+      directorMatchPartnerSurnameSearch.trim().toLowerCase();
+    const directorSessionClubId = String(
+      selectedSession?.club_id || currentMember?.club_id || ""
+    );
+    const directorSelectedClubId =
+      directorMatchClubId || directorSessionClubId;
+    const directorSessionClubMember = supabaseMembers.find(
+      (member: any) =>
+        String(member.club_id) === directorSessionClubId &&
+        String(member.clubs || member.club_name || "").trim()
+    );
+    const directorSessionClubName = String(
+      directorSessionClubMember?.clubs ||
+        directorSessionClubMember?.club_name ||
+        (String(currentMember?.club_id) === directorSessionClubId
+          ? currentMember?.clubs || currentMember?.club_name
+          : "") ||
+        "Session club"
+    ).trim();
+    const directorAvailableStandbyPartners = directorMatchRequest
+      ? directorSelectedClubId === directorSessionClubId
+        ? directorStandbyList
+          .filter(
+            (standbyPlayer: any) =>
+              String(standbyPlayer.nz_bridge_number) !==
+                String(directorMatchRequest.nz_bridge_number) &&
+              String(standbyPlayer.nz_bridge_number) !==
+                String(currentMember?.nz_bridge_number) &&
+              String(standbyPlayer.first_name || "")
+                .toLowerCase()
+                .includes(directorPartnerFirstNameFilter) &&
+              String(standbyPlayer.last_name || "")
+                .toLowerCase()
+                .includes(directorPartnerLastNameFilter)
+          )
+          .sort((firstPlayer: any, secondPlayer: any) =>
+            `${firstPlayer.first_name || ""} ${
+              firstPlayer.last_name || ""
+            }`.localeCompare(
+              `${secondPlayer.first_name || ""} ${
+                secondPlayer.last_name || ""
+              }`
+            )
+          )
+        : []
+      : [];
+    const directorAvailableStandbyNumbers = directorStandbyList.map(
+      (standbyPlayer: any) => String(standbyPlayer.nz_bridge_number)
+    );
+    const directorAvailableMemberPartners =
+      directorMatchRequest && selectedSession
+        ? supabaseMembers
+            .filter(
+              (member: any) =>
+                String(member.club_id) === directorSelectedClubId &&
+                member.is_active !== false &&
+                String(member.nz_bridge_number) !==
+                  String(directorMatchRequest.nz_bridge_number) &&
+                String(member.nz_bridge_number) !==
+                  String(currentMember?.nz_bridge_number) &&
+                !directorAvailableStandbyNumbers.includes(
+                  String(member.nz_bridge_number)
+                ) &&
+                !activeMatchedPlayerNumbersForSelectedSession.includes(
+                  String(member.nz_bridge_number)
+                ) &&
+                String(member.first_name || "")
+                  .toLowerCase()
+                  .includes(directorPartnerFirstNameFilter) &&
+                String(member.last_name || "")
+                  .toLowerCase()
+                  .includes(directorPartnerLastNameFilter)
+            )
+            .sort((firstMember: any, secondMember: any) =>
+              `${firstMember.first_name || ""} ${
+                firstMember.last_name || ""
+              }`.localeCompare(
+                `${secondMember.first_name || ""} ${
+                  secondMember.last_name || ""
+                }`
+              )
+            )
+        : [];
+
+      const currentMemberIsMatchedInSessionDetail =
+        !!currentMemberActiveMatchForSelectedSession;
+
+      const currentMemberPendingInterestsForSelectedSession =
+        supabaseInterests
+          .filter((interest: any) => {
+            if (
+              String(interest.interested_nz_bridge_number) !==
+                String(currentMember?.nz_bridge_number) ||
+              String(interest.interest_status).trim() !== "Pending"
+            ) {
+              return false;
+            }
+
+            const relatedRequest = supabaseRequestRecords.find(
+              (request: any) =>
+                Number(request.request_id) === Number(interest.request_id)
+            );
+
+            return (
+              relatedRequest &&
+              String(relatedRequest.session_instance_id) ===
+                String(selectedSessionId) &&
+              String(relatedRequest.request_status).trim() === "Open"
+            );
+          })
+          .map((interest: any) => {
+            const relatedRequest = supabaseRequestRecords.find(
+              (request: any) =>
+                Number(request.request_id) === Number(interest.request_id)
+            );
+
+            const requestOwner = supabaseMembers.find(
+              (member: any) =>
+                String(member.nz_bridge_number) ===
+                String(relatedRequest?.nz_bridge_number)
+            );
+
+            return {
+              ...interest,
+              requestOwner,
+            };
+          });
     
     return (
       <main style={styles.page}>
@@ -7716,26 +9267,6 @@ React.useEffect(() => {
             />
           )}
 
-          {isCurrentUserDirector && (
-            <div style={{ marginBottom: "24px" }}>
-            <Button
-              onClick={() => {
-                if (
-                  sessionReturnView === "sessions" ||
-                  sessionReturnView === "mySessions"
-                ) {
-                  setScrollToSessionId(selectedSessionId);
-                } else {
-                  setScrollToSessionId(null);
-                }
-                setView(sessionReturnView);
-              }}
-            >
-              ← Back
-            </Button>
-            </div>
-          )}
-
           <div style={styles.detailTabBar}>
             {(isCurrentUserDirector
               ? ["Active", "Matched", "Cancelled", "Standby"]
@@ -7752,8 +9283,10 @@ React.useEffect(() => {
                     : {}),
                 }}
               >
-                {filterName === "Active" && !isCurrentUserDirector
-                  ? "My Status"
+                {filterName === "Active"
+                  ? isCurrentUserDirector
+                    ? "Looking"
+                    : "My Status"
                   : filterName}
               </button>
             ))}
@@ -7936,9 +9469,7 @@ React.useEffect(() => {
                       {!currentStandbyRecord && (
                         <button
                           type="button"
-                          onClick={() => {
-                            setShowRequestTypeModal(true);
-                          }}
+                          onClick={openNewLookingRequestModal}
                           style={{
                             background: "#2b8792",
                             color: "white",
@@ -8017,12 +9548,7 @@ React.useEffect(() => {
                               return;
                             }
 
-                            setStandbyPhone(currentMember?.phone || "");
-                            setStandbyLevelIds([]);
-                            setStandbySystemIds([]);
-                            setStandbyUpdateProfile(true);
-                            setStandbyNote("");
-                            setShowStandbyModal(true);
+                            openNewStandbyModal();
                           }}
                           style={{
                             background: currentStandbyRecord
@@ -8045,6 +9571,35 @@ React.useEffect(() => {
                         </button>
                       ) : null}
                     </div>
+                  )}
+
+                  {!isCurrentUserDirector &&
+                    sessionDetailFilter === "Active" &&
+                    !currentMemberIsMatchedInSessionDetail &&
+                    !myRequest &&
+                    currentMemberPendingInterestsForSelectedSession.length > 0 && (
+                      <div>
+                        {currentMemberPendingInterestsForSelectedSession.map(
+                          (interest: any) => {
+                            const requestOwnerName = interest.requestOwner
+                              ? `${interest.requestOwner.first_name || ""} ${
+                                  interest.requestOwner.last_name || ""
+                                }`.trim()
+                              : "another player";
+
+                            return (
+                              <MyStatusSummary
+                                key={interest.interest_id}
+                                status="INTEREST PENDING"
+                                onClick={() => setSessionDetailFilter("Looking")}
+                              >
+                                You have expressed interest in partnering with{" "}
+                                <strong>{requestOwnerName}</strong>.
+                              </MyStatusSummary>
+                            );
+                          }
+                        )}
+                      </div>
                   )}
 
                   {!isCurrentUserDirector &&
@@ -8120,10 +9675,6 @@ React.useEffect(() => {
                         {isOwnRequest && " (You)"}
                       </span>
                     </div>
-
-                    {renderVisiblePlayerCardDetails(
-                      request.nz_bridge_number
-                    )}
 
                     {renderLookingPreferences(request)}
 
@@ -8338,6 +9889,11 @@ React.useEffect(() => {
                         type="button"
                         onClick={() => {
                           setDirectorMatchRequest(request);
+                          setDirectorMatchPartnerSearch("");
+                          setDirectorMatchPartnerSurnameSearch("");
+                          setDirectorMatchClubId(
+                            String(selectedSession.club_id || "")
+                          );
                           setDirectorMatchPartnerNumber("");
                           setDirectorMatchStandbyId(null);
                           setDirectorMatchNote("");
@@ -8552,8 +10108,6 @@ React.useEffect(() => {
               {sessionDetailFilter === "Standby" &&
                 isCurrentUserDirector && (
                   <>
-                    <h2 style={styles.sectionTitle}>Standby players</h2>
-
                     {directorStandbyList.length === 0 && (
                       <p style={styles.text}>
                         No players are currently available as standby.
@@ -8642,11 +10196,9 @@ React.useEffect(() => {
                   </>
                 )}
 
-              {sessionDetailFilter === "Matched" && (
-                <>
-                  <h2 style={styles.sectionTitle}>Matched</h2>
-
-                  {matchedPartnershipsForSelectedSession.length === 0 && (
+                {sessionDetailFilter === "Matched" && (
+                  <>
+                    {matchedPartnershipsForSelectedSession.length === 0 && (
                     <p style={styles.text}>No matched partnerships yet.</p>
                   )}
 
@@ -8792,17 +10344,14 @@ React.useEffect(() => {
                 </>
               )}
 
-              {sessionDetailFilter === "Cancelled" && (
-                <>
-                  <h2 style={styles.sectionTitle}>Cancelled</h2>
-
-                  {cancelledPartnershipsForSelectedSession.length === 0 && (
+                {sessionDetailFilter === "Cancelled" && (
+                  <>
+                    {cancelledPartnershipsForSelectedSession.length === 0 && (
                     <p style={styles.text}>No cancelled matches for this session.</p>
                   )}
 
                   {cancelledPartnershipsForSelectedSession.length > 0 && (
                     <h3 style={{ ...styles.smallText, marginBottom: "10px" }}>
-                      Cancelled partnerships
                     </h3>
                   )}
 
@@ -8854,62 +10403,131 @@ React.useEffect(() => {
                       >
                         <div
                           style={{
-                            ...styles.nameLine,
-                            gap: "8px",
-                            marginBottom: 0,
-                            flexWrap: "wrap",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            gap: "16px",
                           }}
                         >
-                          {currentMemberIsInThisCancelledMatch ? (
-                            <>
-                              {requesterIsCurrentMember
-                                ? renderCancelledName(
-                                    match.requester,
-                                    match.requester_nz_bridge_number,
-                                    true
-                                  )
-                                : renderCancelledName(
-                                    match.partner,
-                                    match.partner_nz_bridge_number,
-                                    true
-                                  )}
+                          <div
+                            style={{
+                              ...styles.nameLine,
+                              gap: "8px",
+                              marginBottom: 0,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {currentMemberIsInThisCancelledMatch ? (
+                              <>
+                                {requesterIsCurrentMember
+                                  ? renderCancelledName(
+                                      match.requester,
+                                      match.requester_nz_bridge_number,
+                                      true
+                                    )
+                                  : renderCancelledName(
+                                      match.partner,
+                                      match.partner_nz_bridge_number,
+                                      true
+                                    )}
 
-                              <span style={styles.text}>with</span>
+                                <span style={styles.text}>with</span>
 
-                              {requesterIsCurrentMember
-                                ? renderCancelledName(
-                                    match.partner,
-                                    match.partner_nz_bridge_number,
-                                    false
-                                  )
-                                : renderCancelledName(
-                                    match.requester,
-                                    match.requester_nz_bridge_number,
-                                    false
-                                  )}
-                            </>
-                          ) : (
-                            <>
-                              {renderCancelledName(
-                                match.requester,
-                                match.requester_nz_bridge_number,
-                                false
+                                {requesterIsCurrentMember
+                                  ? renderCancelledName(
+                                      match.partner,
+                                      match.partner_nz_bridge_number,
+                                      false
+                                    )
+                                  : renderCancelledName(
+                                      match.requester,
+                                      match.requester_nz_bridge_number,
+                                      false
+                                    )}
+                              </>
+                            ) : (
+                              <>
+                                {renderCancelledName(
+                                  match.requester,
+                                  match.requester_nz_bridge_number,
+                                  false
+                                )}
+
+                                <span style={styles.text}>with</span>
+
+                                {renderCancelledName(
+                                  match.partner,
+                                  match.partner_nz_bridge_number,
+                                  false
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          {match.cancelled_at && (
+                            <div
+                              style={{
+                                color: "#64748b",
+                                fontSize: "12px",
+                                whiteSpace: "nowrap",
+                                textAlign: "right",
+                              }}
+                            >
+                              {new Date(match.cancelled_at).toLocaleString(
+                                "en-NZ",
+                                {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                }
                               )}
-
-                              <span style={styles.text}>with</span>
-
-                              {renderCancelledName(
-                                match.partner,
-                                match.partner_nz_bridge_number,
-                                false
-                              )}
-                            </>
+                            </div>
                           )}
                         </div>
+
+                        {(() => {
+                          const cancelledByMember = supabaseMembers.find(
+                            (member: any) =>
+                              String(member.nz_bridge_number) ===
+                              String(match.cancelled_by_nz_bridge_number)
+                          );
+
+                          const cancelledByName = cancelledByMember
+                            ? `${cancelledByMember.first_name || ""} ${
+                                cancelledByMember.last_name || ""
+                              }`.trim()
+                            : match.cancelled_by_nz_bridge_number
+                              ? `NZ Bridge #${match.cancelled_by_nz_bridge_number}`
+                              : "Not recorded";
+
+                          return (
+                            <div
+                              style={{
+                                color: "#475569",
+                                fontSize: "12px",
+                                marginTop: "8px",
+                              }}
+                            >
+                              <div>
+                                Cancelled by:{" "}
+                                {match.cancelled_by_role === "Director"
+                                  ? `Director — ${cancelledByName}`
+                                  : cancelledByName}
+                              </div>
+
+                              {match.note && (
+                                <div style={{ marginTop: "3px" }}>
+                                  Reason: {match.note}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
-
                 </>
               )}
              </div>
@@ -8956,119 +10574,240 @@ React.useEffect(() => {
                 with a confirmed partner.
               </p>
 
-              <label
+              <div
                 style={{
-                  display: "block",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: "12px",
                   marginTop: "20px",
-                  marginBottom: "8px",
-                  fontSize: "16px",
-                  fontWeight: 700,
+                  marginBottom: "16px",
                 }}
               >
-                Select partner
-              </label>
+                <label
+                  htmlFor="director-session-partner-first-name"
+                  style={{ fontSize: "15px", fontWeight: 700 }}
+                >
+                  First name
+                  <input
+                    id="director-session-partner-first-name"
+                    type="search"
+                    value={directorMatchPartnerSearch}
+                    onChange={(event) => {
+                      setDirectorMatchPartnerSearch(event.target.value);
+                      setDirectorMatchPartnerNumber("");
+                      setDirectorMatchStandbyId(null);
+                    }}
+                    placeholder="First name"
+                    autoComplete="off"
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      padding: "12px",
+                      borderRadius: "12px",
+                      border: "1px solid #cbd5e1",
+                      marginTop: "8px",
+                      fontSize: "15px",
+                      fontWeight: 400,
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </label>
 
-              <select
-                value={
-                  directorMatchStandbyId
-                    ? `standby:${directorMatchStandbyId}`
-                    : directorMatchPartnerNumber
-                    ? `member:${directorMatchPartnerNumber}`
-                    : ""
-                }
-                onChange={(event) => {
-                  const selectedValue = event.target.value;
+                <label
+                  htmlFor="director-session-partner-last-name"
+                  style={{ fontSize: "15px", fontWeight: 700 }}
+                >
+                  Last name
+                  <input
+                    id="director-session-partner-last-name"
+                    type="search"
+                    value={directorMatchPartnerSurnameSearch}
+                    onChange={(event) => {
+                      setDirectorMatchPartnerSurnameSearch(event.target.value);
+                      setDirectorMatchPartnerNumber("");
+                      setDirectorMatchStandbyId(null);
+                    }}
+                    placeholder="Last name"
+                    autoComplete="off"
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      padding: "12px",
+                      borderRadius: "12px",
+                      border: "1px solid #cbd5e1",
+                      marginTop: "8px",
+                      fontSize: "15px",
+                      fontWeight: 400,
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </label>
 
-                  if (!selectedValue) {
-                    setDirectorMatchPartnerNumber("");
-                    setDirectorMatchStandbyId(null);
-                    return;
-                  }
+                <label
+                  htmlFor="director-session-partner-club"
+                  style={{ fontSize: "15px", fontWeight: 700 }}
+                >
+                  Club
+                  <select
+                    id="director-session-partner-club"
+                    value={directorSelectedClubId}
+                    onChange={(event) => {
+                      setDirectorMatchClubId(event.target.value);
+                      setDirectorMatchPartnerNumber("");
+                      setDirectorMatchStandbyId(null);
+                    }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      padding: "12px",
+                      borderRadius: "12px",
+                      border: "1px solid #cbd5e1",
+                      marginTop: "8px",
+                      fontSize: "15px",
+                      fontWeight: 400,
+                      boxSizing: "border-box",
+                      background: "white",
+                    }}
+                  >
+                    <option value={directorSessionClubId}>
+                      {directorSessionClubName}
+                    </option>
+                  </select>
+                </label>
+              </div>
 
-                  const [partnerType, partnerValue] =
-                    selectedValue.split(":");
+              <div style={{ marginBottom: "18px" }}>
+                <div
+                  style={{
+                    marginBottom: "8px",
+                    fontSize: "16px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Available players
+                </div>
 
-                  if (partnerType === "standby") {
-                    const selectedStandby = directorStandbyList.find(
-                      (standbyPlayer: any) =>
-                        Number(standbyPlayer.standby_id) ===
-                        Number(partnerValue)
-                    );
+                  {directorAvailableStandbyPartners.length === 0 &&
+                  directorAvailableMemberPartners.length === 0 ? (
+                    <p style={{ ...styles.smallText, margin: 0 }}>
+                      {hasDirectorPartnerSearch
+                        ? "No available players match your search."
+                        : "No available players for this session."}
+                    </p>
+                  ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                      maxHeight: "280px",
+                      overflowY: "auto",
+                      paddingRight: "4px",
+                    }}
+                  >
+                    {directorAvailableStandbyPartners.map(
+                      (standbyPlayer: any) => {
+                        const isSelected =
+                          Number(directorMatchStandbyId) ===
+                          Number(standbyPlayer.standby_id);
 
-                    setDirectorMatchStandbyId(Number(partnerValue));
-                    setDirectorMatchPartnerNumber(
-                      selectedStandby
-                        ? String(selectedStandby.nz_bridge_number)
-                        : ""
-                    );
-                    return;
-                  }
+                        return (
+                          <button
+                            key={`standby-result-${standbyPlayer.standby_id}`}
+                            type="button"
+                            aria-pressed={isSelected}
+                            onClick={() => {
+                              setDirectorMatchStandbyId(
+                                Number(standbyPlayer.standby_id)
+                              );
+                              setDirectorMatchPartnerNumber(
+                                String(standbyPlayer.nz_bridge_number)
+                              );
+                            }}
+                            style={{
+                              width: "100%",
+                              border: isSelected
+                                ? "2px solid #2b8792"
+                                : "1px solid #cbd5e1",
+                              borderRadius: "12px",
+                              background: isSelected ? "#e0f2f4" : "#f8fafc",
+                              color: "#0f172a",
+                              padding: "12px 14px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "12px",
+                              textAlign: "left",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <span style={{ fontWeight: 700 }}>
+                              {standbyPlayer.first_name || "Unknown"}{" "}
+                              {standbyPlayer.last_name || "player"}
+                            </span>
+                            <span
+                              style={{
+                                color: "#0f766e",
+                                fontSize: "12px",
+                                fontWeight: 700,
+                              }}
+                            >
+                              Standby
+                            </span>
+                          </button>
+                        );
+                      }
+                    )}
 
-                  setDirectorMatchStandbyId(null);
-                  setDirectorMatchPartnerNumber(partnerValue);
-                }}
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  borderRadius: "12px",
-                  border: "1px solid #cbd5e1",
-                  marginBottom: "18px",
-                  fontSize: "15px",
-                  boxSizing: "border-box",
-                  background: "white",
-                }}
-              >
-                <option value="">Select a partner</option>
+                    {directorAvailableMemberPartners.map((member: any) => {
+                      const isSelected =
+                        !directorMatchStandbyId &&
+                        String(directorMatchPartnerNumber) ===
+                          String(member.nz_bridge_number);
 
-                {directorStandbyList.length > 0 && (
-                  <optgroup label="Available Standby players">
-                    {directorStandbyList
-                      .filter(
-                        (standbyPlayer: any) =>
-                          String(standbyPlayer.nz_bridge_number) !==
-                          String(directorMatchRequest.nz_bridge_number)
-                      )
-                      .map((standbyPlayer: any) => (
-                        <option
-                          key={`standby-option-${standbyPlayer.standby_id}`}
-                          value={`standby:${standbyPlayer.standby_id}`}
+                      return (
+                        <button
+                          key={`member-result-${member.nz_bridge_number}`}
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() => {
+                            setDirectorMatchStandbyId(null);
+                            setDirectorMatchPartnerNumber(
+                              String(member.nz_bridge_number)
+                            );
+                          }}
+                          style={{
+                            width: "100%",
+                            border: isSelected
+                              ? "2px solid #2b8792"
+                              : "1px solid #cbd5e1",
+                            borderRadius: "12px",
+                            background: isSelected ? "#e0f2f4" : "#f8fafc",
+                            color: "#0f172a",
+                            padding: "12px 14px",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: "12px",
+                            textAlign: "left",
+                            cursor: "pointer",
+                          }}
                         >
-                          {standbyPlayer.first_name || "Unknown"}{" "}
-                          {standbyPlayer.last_name || "player"} — Standby
-                        </option>
-                      ))}
-                  </optgroup>
+                          <span style={{ fontWeight: 700 }}>
+                            {member.first_name || "Unknown"}{" "}
+                            {member.last_name || "player"}
+                          </span>
+                          <span
+                            style={{ color: "#64748b", fontSize: "12px" }}
+                          >
+                            NZ Bridge #{member.nz_bridge_number}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
-
-                <optgroup label="Other active club members">
-                  {supabaseMembers
-                    .filter(
-                      (member: any) =>
-                        String(member.club_id) ===
-                          String(selectedSession.club_id) &&
-                        member.is_active !== false &&
-                        String(member.nz_bridge_number) !==
-                          String(directorMatchRequest.nz_bridge_number) &&
-                        !activeMatchedPlayerNumbersForSelectedSession.includes(
-                          String(member.nz_bridge_number)
-                        )
-                    )
-                    .sort((a: any, b: any) =>
-                      `${a.first_name || ""} ${a.last_name || ""}`.localeCompare(
-                        `${b.first_name || ""} ${b.last_name || ""}`
-                      )
-                    )
-                    .map((member: any) => (
-                      <option
-                        key={`member-option-${member.nz_bridge_number}`}
-                        value={`member:${member.nz_bridge_number}`}
-                      >
-                        {member.first_name || "Unknown"}{" "}
-                        {member.last_name || "player"}
-                      </option>
-                    ))}
-                </optgroup>
-              </select>
+              </div>
 
               <label
                 style={{
@@ -9193,6 +10932,9 @@ React.useEffect(() => {
                     }
 
                     setDirectorMatchRequest(null);
+                    setDirectorMatchPartnerSearch("");
+                    setDirectorMatchPartnerSurnameSearch("");
+                    setDirectorMatchClubId("");
                     setDirectorMatchPartnerNumber("");
                     setDirectorMatchStandbyId(null);
                     setDirectorMatchNote("");
@@ -9206,6 +10948,9 @@ React.useEffect(() => {
                   secondary={true}
                   onClick={() => {
                     setDirectorMatchRequest(null);
+                    setDirectorMatchPartnerSearch("");
+                    setDirectorMatchPartnerSurnameSearch("");
+                    setDirectorMatchClubId("");
                     setDirectorMatchPartnerNumber("");
                     setDirectorMatchStandbyId(null);
                     setDirectorMatchNote("");
@@ -9426,13 +11171,18 @@ React.useEffect(() => {
                         return;
                       }
                     } else {
-                      const { error: cancelMatchError } = await supabase
-                        .from("matches")
-                        .update({
-                          match_status: "Cancelled",
-                          note: matchCancelReason.trim() || null,
-                        })
-                        .eq("match_id", matchToCancel.match_id);
+                    const { error: cancelMatchError } = await supabase
+                      .from("matches")
+                      .update({
+                        match_status: "Cancelled",
+                        note: matchCancelReason.trim() || null,
+                        cancelled_by_nz_bridge_number: Number(
+                          currentMember.nz_bridge_number
+                        ),
+                        cancelled_by_role: "Player",
+                        cancelled_at: new Date().toISOString(),
+                      })
+                      .eq("match_id", matchToCancel.match_id);
 
                       if (cancelMatchError) {
                         console.error(
@@ -10767,13 +12517,18 @@ React.useEffect(() => {
               <Button
                 secondary={true}
                 onClick={async () => {
-                  const { error: cancelMatchError } = await supabase
-                    .from("matches")
-                    .update({
-                      match_status: "Cancelled",
-                      note: matchCancelReason,
-                    })
-                    .eq("match_id", matchToCancel.match_id);
+                const { error: cancelMatchError } = await supabase
+                  .from("matches")
+                  .update({
+                    match_status: "Cancelled",
+                    note: matchCancelReason.trim() || null,
+                    cancelled_by_nz_bridge_number: Number(
+                      currentMember.nz_bridge_number
+                    ),
+                    cancelled_by_role: "Player",
+                    cancelled_at: new Date().toISOString(),
+                  })
+                  .eq("match_id", matchToCancel.match_id);
 
                   if (cancelMatchError) {
                     console.error("Cancel match error:", cancelMatchError);
