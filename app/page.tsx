@@ -993,7 +993,7 @@ export default function BridgeBuddy() {
           (member: any) =>
             String(member.profile_completed || "").toLowerCase() === "yes"
         )
-        .map((member: any) => member.nz_bridge_number || member.member_id),
+        .map((member: any) => member.nz_bridge_number),
     ]
       .map((profileNumber) => Number(profileNumber))
       .filter((profileNumber) => Number.isFinite(profileNumber));
@@ -1430,7 +1430,13 @@ React.useEffect(() => {
         });
       });
   }
-  const [chatPartner, setChatPartner] = useState<any>(null);
+  const [chatPartner, setChatPartnerState] = useState<any>(null);
+
+  function setChatPartner(partner: any) {
+    console.log("SET CHAT PARTNER:", partner);
+    setChatPartnerState(partner);
+  }
+  
   const [chatMessageText, setChatMessageText] = useState("");
   const [chatReturnView, setChatReturnView] = useState("sessions");
   const [chatBlockStatus, setChatBlockStatus] = useState({
@@ -1476,26 +1482,11 @@ React.useEffect(() => {
       avatarNumbers.push(selectedPartnerNumber);
     }
 
-    csvMembers
-      .filter(
-        (member: any) =>
-          String(member.profile_completed || "").toLowerCase() === "yes"
-      )
-      .forEach((member: any) => {
-        const profileNumber = Number(
-          member.nz_bridge_number || member.member_id
-        );
-        if (Number.isFinite(profileNumber)) {
-          avatarNumbers.push(profileNumber);
-        }
-      });
-
     return [...new Set(avatarNumbers)].sort((a, b) => a - b).join(",");
   }, [
     currentMember?.nz_bridge_number,
     supabaseChatMessages,
     chatPartner?.nz_bridge_number,
-    csvMembers,
   ]);
 
   React.useEffect(() => {
@@ -6971,9 +6962,39 @@ React.useEffect(() => {
                                               interest.interested_nz_bridge_number
                                             )}
 
-                                            {renderVisiblePlayerCardDetails(
-                                              interest.interested_nz_bridge_number
-                                            )}
+                                            <div
+                                              key={interest.interest_id}
+                                              style={styles.interestedPlayerCard}
+                                            >
+                                              {renderTournamentRegistrationPlayerName(
+                                                interest.member,
+                                                interestedName,
+                                                interest.interested_nz_bridge_number
+                                              )}
+
+                                              <div style={styles.buttonRow}>
+                                                <button
+                                                  type="button"
+                                                  style={styles.compactPrimaryAction}
+                                                  onClick={() =>
+                                                    setTournamentInterestToAccept(interest)
+                                                  }
+                                                >
+                                                  Accept
+                                                </button>
+
+                                                <button
+                                                  type="button"
+                                                  style={styles.compactPrimaryAction}
+                                                  onClick={() => {
+                                                    setTournamentInterestToDecline(interest);
+                                                    setTournamentDeclineReason("");
+                                                  }}
+                                                >
+                                                  Decline
+                                                </button>
+                                              </div>
+                                            </div>
 
                                             <div style={styles.buttonRow}>
                                               <button
@@ -13381,9 +13402,15 @@ React.useEffect(() => {
               type="button"
               disabled={chatSendDisabled}
               onClick={async () => {
-                if (!currentMember || !chatPartner || !chatMessageText.trim()) return;
+              if (!currentMember || !chatPartner || !chatMessageText.trim()) return;
 
-                const { data: insertedChatMessage, error: sendMessageError } = await supabase
+              console.log("CHAT SEND VALUES:", {
+                currentMemberNzBridgeNumber: currentMember.nz_bridge_number,
+                chatPartnerNzBridgeNumber: chatPartner.nz_bridge_number,
+                chatPartner,
+              });
+
+              const { data: insertedChatMessage, error: sendMessageError } = await supabase
                   .from("chat_messages")
                   .insert({
                     from_nz_bridge_number: Number(currentMember.nz_bridge_number),
@@ -13610,10 +13637,19 @@ React.useEffect(() => {
 
           <div style={styles.directoryPlayerList}>
             {filteredDirectoryPlayers.map((player: any) => {
-              const playerNumber = Number(
-                player.nz_bridge_number || player.member_id
+              const matchingSupabaseMember = supabaseMembers.find(
+                (member: any) =>
+                  String(member.email || "").toLowerCase().trim() ===
+                  String(player.email || "").toLowerCase().trim()
               );
-              const playerNumberKey = String(playerNumber);
+
+              const playerNumber = Number(
+                player.nz_bridge_number ||
+                  matchingSupabaseMember?.nz_bridge_number
+              );
+              const playerNumberKey = Number.isFinite(playerNumber)
+                ? String(playerNumber)
+                : `csv-${String(player.member_id || player.email || `${player.first_name}-${player.last_name}`)}`;
               const isCurrentPlayer =
                 playerNumberKey ===
                 String(currentMember?.nz_bridge_number || "");
