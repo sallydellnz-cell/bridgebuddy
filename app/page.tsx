@@ -27,20 +27,75 @@ function PeopleGroupIcon() {
   );
 }
 
+const CHAT_ATTACHMENT_BUCKET = "chat-attachments";
+const MAX_CHAT_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const CHAT_ATTACHMENT_EXTENSIONS = new Set([
+  "doc",
+  "docx",
+  "txt",
+  "pdf",
+  "xls",
+  "xlsx",
+  "csv",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+]);
+
+function chatAttachmentExtension(fileName: string) {
+  return fileName.split(".").pop()?.toLowerCase() || "";
+}
+
+function validateChatAttachment(file: File) {
+  if (!CHAT_ATTACHMENT_EXTENSIONS.has(chatAttachmentExtension(file.name))) {
+    return "Choose a Word, text, PDF, Excel, CSV, or image file.";
+  }
+  if (file.size > MAX_CHAT_ATTACHMENT_BYTES) {
+    return "Attachments must be 10 MB or smaller.";
+  }
+  return "";
+}
+
+function safeChatAttachmentName(fileName: string) {
+  return fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(-120);
+}
+
+function formatAttachmentSize(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function Button({
   children,
   onClick,
   secondary = false,
+  disabled = false,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   secondary?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      style={secondary ? styles.buttonSecondary : styles.button}
+      disabled={disabled}
+      style={{
+        ...(secondary ? styles.buttonSecondary : styles.button),
+        ...(disabled
+          ? {
+              background: "#dbe4e7",
+              border: "1px solid #dbe4e7",
+              color: "#829399",
+              cursor: "not-allowed",
+              boxShadow: "none",
+            }
+          : {}),
+      }}
     >
       {children}
     </button>
@@ -586,6 +641,60 @@ function visibleProfileDetail(
   if (profile?._profileLoadError) return "Unavailable";
   if (isVisible === false) return "Not shared";
   return value || emptyText;
+}
+
+type BrowserRoute = {
+  view: string;
+  sessionId?: string;
+  memberNumber?: string;
+  tab?: string;
+  isDirectorRoute?: boolean;
+};
+
+function readBrowserRoute(): BrowserRoute {
+  if (typeof window === "undefined") return { view: "landing" };
+
+  const segments = window.location.pathname
+    .split("/")
+    .filter(Boolean)
+    .map(decodeURIComponent);
+  const tab = new URLSearchParams(window.location.search).get("tab") || undefined;
+  const isDirectorRoute = segments[0] === "director";
+  const routeSegments = isDirectorRoute ? segments.slice(1) : segments;
+  const [section, identifier] = routeSegments;
+
+  if (!section) return { view: "landing" };
+  if (section === "login") return { view: "login" };
+  if (section === "create-profile") return { view: "createProfile" };
+  if (section === "complete-profile") return { view: "completeProfile" };
+  if (section === "account") return { view: "account" };
+  if (section === "standbys") return { view: "myStandbys" };
+  if (section === "matches") return { view: "matches" };
+  if (section === "alerts") return { view: "notifications" };
+  if (section === "players") {
+    return { view: "directory", memberNumber: identifier };
+  }
+  if (section === "chats") {
+    return {
+      view: identifier ? "chat" : "chats",
+      memberNumber: identifier,
+    };
+  }
+  if (section === "sessions") {
+    if (identifier === "mine") return { view: "mySessions" };
+    return {
+      view: identifier ? "sessionDetail" : "sessions",
+      sessionId: identifier,
+      tab,
+      isDirectorRoute,
+    };
+  }
+
+  return { view: "sessions" };
+}
+
+function tabSlug(tab: string) {
+  return tab.toLowerCase().replace(/\s+/g, "-");
 }
 
 export default function BridgeBuddy() {
@@ -1434,10 +1543,25 @@ React.useEffect(() => {
 
   function setChatPartner(partner: any) {
     console.log("SET CHAT PARTNER:", partner);
+    setChatMessageText("");
+    setChatAttachmentFile(null);
+    setChatAttachmentError("");
+    setIsChatAttachmentUploading(false);
+    if (chatAttachmentInputRef.current) {
+      chatAttachmentInputRef.current.value = "";
+    }
     setChatPartnerState(partner);
   }
   
   const [chatMessageText, setChatMessageText] = useState("");
+  const [chatAttachmentFile, setChatAttachmentFile] = useState<File | null>(null);
+  const [chatAttachmentError, setChatAttachmentError] = useState("");
+  const [isChatAttachmentUploading, setIsChatAttachmentUploading] =
+    useState(false);
+  const [chatAttachmentUrls, setChatAttachmentUrls] = useState<
+    Record<string, string>
+  >({});
+  const chatAttachmentInputRef = React.useRef<HTMLInputElement | null>(null);
   const [chatReturnView, setChatReturnView] = useState("sessions");
   const [chatBlockStatus, setChatBlockStatus] = useState({
     blockedByMe: false,
@@ -1630,6 +1754,7 @@ React.useEffect(() => {
     currentMember?.nz_bridge_number,
     chatPartner?.nz_bridge_number,
   ]);
+
   const [matchToCancel, setMatchToCancel] = useState<any>(null);
   const [matchCancelReason, setMatchCancelReason] = useState("");
   const [interestToDecline, setInterestToDecline] = useState<any>(null);
@@ -1700,6 +1825,196 @@ React.useEffect(() => {
   const [selectedProfileMember, setSelectedProfileMember] = useState<any>(null);
   const [showForm, setShowForm] = useState(false);
   const [view, setView] = useState("landing");
+  const isApplyingBrowserHistory = React.useRef(false);
+  const hasAppliedInitialBrowserRoute = React.useRef(false);
+
+  React.useEffect(() => {
+    if (view !== "chat" || !currentMember || !chatPartner) {
+      setChatAttachmentUrls({});
+      return;
+    }
+
+    const attachmentPaths = supabaseChatMessages
+      .filter(
+        (message: any) =>
+          message.attachment_path &&
+          ((String(message.from_nz_bridge_number) ===
+            String(currentMember.nz_bridge_number) &&
+            String(message.to_nz_bridge_number) ===
+              String(chatPartner.nz_bridge_number)) ||
+            (String(message.from_nz_bridge_number) ===
+              String(chatPartner.nz_bridge_number) &&
+              String(message.to_nz_bridge_number) ===
+                String(currentMember.nz_bridge_number)))
+      )
+      .map((message: any) => String(message.attachment_path));
+
+    let cancelled = false;
+    void Promise.all(
+      [...new Set(attachmentPaths)].map(async (path) => {
+        const { data, error } = await supabase.storage
+          .from(CHAT_ATTACHMENT_BUCKET)
+          .createSignedUrl(path, 60 * 60);
+        return error || !data?.signedUrl ? null : [path, data.signedUrl];
+      })
+    ).then((signedEntries) => {
+      if (cancelled) return;
+      setChatAttachmentUrls(
+        Object.fromEntries(
+          signedEntries.filter(
+            (entry): entry is [string, string] => entry !== null
+          )
+        )
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, currentMember, chatPartner, supabaseChatMessages]);
+
+  const applyBrowserRoute = React.useCallback(() => {
+    const route = readBrowserRoute();
+    isApplyingBrowserHistory.current = true;
+
+    setProfileToView(null);
+    setView(route.view);
+
+    if (route.sessionId) {
+      setSelectedSessionId(route.sessionId);
+      setSessionReturnView("sessions");
+
+      const selectedRouteSession = supabaseSessions.find(
+        (session: any) =>
+          String(session.session_instance_id) === String(route.sessionId)
+      );
+      const isTournament = selectedRouteSession?.location_type === "Tournaments";
+
+      if (isTournament) {
+        setView("tournamentDetail");
+        const tournamentTabs: Record<string, string> = {
+          "my-status": "My Status",
+          registered: "Registered",
+          looking: "Looking",
+          matched: "Matched",
+          cancelled: "Cancelled",
+          standby: "Standby",
+        };
+        setTournamentDetailFilter(
+          (route.tab && tournamentTabs[route.tab]) ||
+            (route.isDirectorRoute ? "Looking" : "My Status")
+        );
+      } else {
+        const sessionTabs: Record<string, string> = {
+          "my-status": "Active",
+          active: "Active",
+          looking: route.isDirectorRoute ? "Active" : "Looking",
+          matched: "Matched",
+          cancelled: "Cancelled",
+          standby: "Standby",
+        };
+        setSessionDetailFilter(
+          (route.tab && sessionTabs[route.tab]) || "Active"
+        );
+      }
+    }
+
+    if (route.memberNumber) {
+      const member = supabaseMembers.find(
+        (candidate: any) =>
+          String(candidate.nz_bridge_number) === String(route.memberNumber)
+      ) || {
+        nz_bridge_number: route.memberNumber,
+        first_name: "Unknown",
+        last_name: "player",
+      };
+
+      if (route.view === "chat") {
+        setChatPartner(member);
+      } else if (route.view === "directory") {
+        setProfileToView(member);
+      }
+    }
+
+    hasAppliedInitialBrowserRoute.current = true;
+  }, [supabaseMembers, supabaseSessions]);
+
+  React.useEffect(() => {
+    applyBrowserRoute();
+
+    const handlePopState = () => applyBrowserRoute();
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [applyBrowserRoute]);
+
+  React.useEffect(() => {
+    if (!hasAppliedInitialBrowserRoute.current) return;
+    if (isApplyingBrowserHistory.current) {
+      isApplyingBrowserHistory.current = false;
+      return;
+    }
+
+    let nextUrl = "/";
+    const routePrefix = isCurrentUserDirector ? "/director" : "";
+
+    if (profileToView?.nz_bridge_number) {
+      nextUrl = `/players/${encodeURIComponent(
+        String(profileToView.nz_bridge_number)
+      )}`;
+    } else if (view === "sessionDetail" || view === "tournamentDetail") {
+      if (!selectedSessionId) return;
+      const selectedTab =
+        view === "tournamentDetail"
+          ? tournamentDetailFilter
+          : sessionDetailFilter === "Active"
+            ? isCurrentUserDirector
+              ? "Looking"
+              : "My Status"
+            : sessionDetailFilter;
+      nextUrl = `${routePrefix}/sessions/${encodeURIComponent(
+        String(selectedSessionId)
+      )}?tab=${tabSlug(selectedTab)}`;
+    } else if (view === "sessions") {
+      nextUrl = `${routePrefix}/sessions`;
+    } else if (view === "mySessions") {
+      nextUrl = "/sessions/mine";
+    } else if (view === "myStandbys") {
+      nextUrl = "/standbys";
+    } else if (view === "matches") {
+      nextUrl = "/matches";
+    } else if (view === "notifications") {
+      nextUrl = "/alerts";
+    } else if (view === "directory") {
+      nextUrl = "/players";
+    } else if (view === "chat" && chatPartner?.nz_bridge_number) {
+      nextUrl = `/chats/${encodeURIComponent(
+        String(chatPartner.nz_bridge_number)
+      )}`;
+    } else if (view === "chats") {
+      nextUrl = "/chats";
+    } else if (view === "account") {
+      nextUrl = "/account";
+    } else if (view === "login") {
+      nextUrl = "/login";
+    } else if (view === "createProfile") {
+      nextUrl = "/create-profile";
+    } else if (view === "completeProfile") {
+      nextUrl = "/complete-profile";
+    }
+
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+    if (currentUrl !== nextUrl) {
+      window.history.pushState({}, "", nextUrl);
+    }
+  }, [
+    view,
+    selectedSessionId,
+    sessionDetailFilter,
+    tournamentDetailFilter,
+    profileToView?.nz_bridge_number,
+    chatPartner?.nz_bridge_number,
+    isCurrentUserDirector,
+  ]);
 
   React.useEffect(() => {
     if (hasRestoredSavedLogin || supabaseMembers.length === 0) return;
@@ -1719,7 +2034,7 @@ React.useEffect(() => {
 
     if (savedMember) {
       setCurrentMember(savedMember);
-      setView("sessions");
+      setView(readBrowserRoute().view === "landing" ? "sessions" : readBrowserRoute().view);
       return;
     }
 
@@ -1789,7 +2104,11 @@ React.useEffect(() => {
       }
     );
     if (savePreference) saveLoginPreference(email);
-    setView("sessions");
+    setView(
+      !savePreference && readBrowserRoute().view !== "landing"
+        ? readBrowserRoute().view
+        : "sessions"
+    );
   }
 
   async function loginWithMemberEmail() {
@@ -2444,6 +2763,43 @@ React.useEffect(() => {
   const [directorStandbyList, setDirectorStandbyList] = useState<any[]>([]);
   const [directorStandbyCounts, setDirectorStandbyCounts] = useState<any[]>([]);
 
+  function standbyPreferencesStorageKey() {
+    const memberKey =
+      currentMember?.nz_bridge_number || currentMember?.email || "guest";
+    return `bridgebuddy_standby_preferences_${memberKey}`;
+  }
+
+  function rememberStandbyPreferences() {
+    localStorage.setItem(
+      standbyPreferencesStorageKey(),
+      JSON.stringify({
+        phone: standbyPhone.trim(),
+        playingLevelIds: standbyLevelIds,
+        systemIds: standbySystemIds,
+        updateProfile: standbyUpdateProfile,
+      })
+    );
+  }
+
+  function lookingPreferencesStorageKey() {
+    const memberKey =
+      currentMember?.nz_bridge_number || currentMember?.email || "guest";
+    return `bridgebuddy_looking_preferences_${memberKey}`;
+  }
+
+  function rememberLookingPreferences() {
+    localStorage.setItem(
+      lookingPreferencesStorageKey(),
+      JSON.stringify({
+        levels: wantedLevel
+          .split(",")
+          .map((level) => level.trim())
+          .filter(Boolean),
+        systems: wantedSystems,
+      })
+    );
+  }
+
   function openNewLookingRequestModal() {
     const profileLevelNames = accountProfile.playingLevelIds
       .map(
@@ -2462,18 +2818,85 @@ React.useEffect(() => {
       )
       .filter(Boolean);
 
-    setWantedLevel(profileLevelNames.join(","));
-    setWantedSystems(profileSystemNames);
+    let rememberedPreferences: {
+      levels?: string[];
+      systems?: string[];
+    } | null = null;
+
+    try {
+      const savedPreferences = localStorage.getItem(
+        lookingPreferencesStorageKey()
+      );
+      rememberedPreferences = savedPreferences
+        ? JSON.parse(savedPreferences)
+        : null;
+    } catch (error) {
+      console.error("Load looking preferences error:", error);
+    }
+
+    const validLevelNames = new Set(
+      supabaseLevels.map((level: any) => String(level.level_name))
+    );
+    const validSystemNames = new Set(
+      supabaseSystems.map((system: any) => String(system.system_name))
+    );
+
+    const rememberedLevels = Array.isArray(rememberedPreferences?.levels)
+      ? rememberedPreferences.levels.filter((level) =>
+          validLevelNames.has(String(level))
+        )
+      : null;
+    const rememberedSystems = Array.isArray(rememberedPreferences?.systems)
+      ? rememberedPreferences.systems.filter((system) =>
+          validSystemNames.has(String(system))
+        )
+      : null;
+
+    setWantedLevel((rememberedLevels || profileLevelNames).join(","));
+    setWantedSystems(rememberedSystems || profileSystemNames);
     setShowRequestTypeModal(true);
   }
 
   function openNewStandbyModal() {
+    let rememberedPreferences: {
+      phone?: string;
+      playingLevelIds?: number[];
+      systemIds?: number[];
+      updateProfile?: boolean;
+    } | null = null;
+
+    try {
+      const savedPreferences = localStorage.getItem(
+        standbyPreferencesStorageKey()
+      );
+      rememberedPreferences = savedPreferences
+        ? JSON.parse(savedPreferences)
+        : null;
+    } catch (error) {
+      console.error("Load standby preferences error:", error);
+    }
+
     setStandbyPhone(
-      accountProfile.contactPhone || currentMember?.phone || ""
+      rememberedPreferences?.phone ??
+        accountProfile.contactPhone ??
+        currentMember?.phone ??
+        ""
     );
-    setStandbyLevelIds([...accountProfile.playingLevelIds]);
-    setStandbySystemIds([...accountProfile.systemIds]);
-    setStandbyUpdateProfile(true);
+    setStandbyLevelIds(
+      Array.isArray(rememberedPreferences?.playingLevelIds)
+        ? rememberedPreferences.playingLevelIds.map(Number).filter(Number.isFinite)
+        : [...accountProfile.playingLevelIds]
+    );
+    setStandbySystemIds(
+      Array.isArray(rememberedPreferences?.systemIds)
+        ? rememberedPreferences.systemIds.map(Number).filter(Number.isFinite)
+        : [...accountProfile.systemIds]
+    );
+    setStandbyUpdateProfile(
+      typeof rememberedPreferences?.updateProfile === "boolean"
+        ? rememberedPreferences.updateProfile
+        : true
+    );
     setStandbyNote("");
     setShowStandbyModal(true);
   }
@@ -2969,6 +3392,7 @@ React.useEffect(() => {
   }
 
   if (insertedRequest) {
+    rememberLookingPreferences();
     await refreshSupabaseData();
   }
 }
@@ -3000,6 +3424,7 @@ React.useEffect(() => {
       return;
     }
 
+    rememberLookingPreferences();
     await refreshSupabaseData();
   }
 
@@ -4563,11 +4988,35 @@ React.useEffect(() => {
             <div>
 
                 <div style={{ fontSize: "16px" }}>
-                  <span
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSessionReturnView(
+                        view === "mySessions" ? "mySessions" : "sessions"
+                      );
+                      setSelectedSessionId(session.session_instance_id);
+                      setSessionDetailFilter("Active");
+                      setTournamentDetailFilter(
+                        isCurrentUserDirector ? "Looking" : "My Status"
+                      );
+                      setView(
+                        session.location_type === "Tournaments"
+                          ? "tournamentDetail"
+                          : "sessionDetail"
+                      );
+                    }}
                     style={{
-                      color: "#0f172a",
+                      border: "none",
+                      background: "transparent",
+                      padding: 0,
+                      color: "#4338ca",
                       fontWeight: 700,
                       fontSize: "16px",
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      textUnderlineOffset: "3px",
                     }}
                   >
                     {new Date(session.session_date + "T00:00:00").toLocaleDateString("en-NZ", {
@@ -4577,7 +5026,7 @@ React.useEffect(() => {
                     })}
                     {" · "}
                     {session.start_time?.slice(0, 5)}
-                  </span>
+                  </button>
 
                  <span
                     style={{
@@ -4718,14 +5167,6 @@ React.useEffect(() => {
                               "Registered"
                         ).length;
 
-                      if (session.location_type === "Tournaments") {
-                        return `${registeredPairCount} ${
-                          registeredPairCount === 1 ? "pair" : "pairs"
-                        } registered · ${uniqueLookingCount} ${
-                          uniqueLookingCount === 1 ? "player" : "players"
-                        } looking`;
-                      }
-
                       const standbyCountRecord = directorStandbyCounts.find(
                         (standbyCount: any) =>
                           String(standbyCount.session_instance_id) ===
@@ -4742,6 +5183,94 @@ React.useEffect(() => {
                             String(session.session_instance_id) &&
                           String(match.match_status).trim() === "Active"
                       ).length;
+
+                      if (session.location_type === "Tournaments") {
+                        const openTournamentTab = (
+                          event: React.MouseEvent<HTMLButtonElement>,
+                          tab: string
+                        ) => {
+                          event.stopPropagation();
+                          setSessionReturnView(
+                            view === "mySessions" ? "mySessions" : "sessions"
+                          );
+                          setSelectedSessionId(session.session_instance_id);
+                          setTournamentDetailFilter(tab);
+                          setView("tournamentDetail");
+                        };
+
+                        const tournamentCountLinkStyle = {
+                          border: "none",
+                          background: "transparent",
+                          padding: 0,
+                          color: "#4338ca",
+                          fontSize: "14px",
+                          fontFamily: "inherit",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                          textUnderlineOffset: "3px",
+                        } as const;
+
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(event) =>
+                                openTournamentTab(event, "Registered")
+                              }
+                              style={tournamentCountLinkStyle}
+                            >
+                              {registeredPairCount}{" "}
+                              {registeredPairCount === 1 ? "pair" : "pairs"}{" "}
+                              registered
+                            </button>
+
+                            <span> · </span>
+
+                            <button
+                              type="button"
+                              onClick={(event) =>
+                                openTournamentTab(event, "Looking")
+                              }
+                              style={tournamentCountLinkStyle}
+                            >
+                              {uniqueLookingCount}{" "}
+                              {uniqueLookingCount === 1 ? "player" : "players"}{" "}
+                              looking
+                            </button>
+
+                            {isCurrentUserDirector && (
+                              <>
+                                <span> · </span>
+
+                                <button
+                                  type="button"
+                                  onClick={(event) =>
+                                    openTournamentTab(event, "Standby")
+                                  }
+                                  style={tournamentCountLinkStyle}
+                                >
+                                  {standbyCount}{" "}
+                                  {standbyCount === 1 ? "standby" : "standbys"}
+                                </button>
+
+                                <span> · </span>
+
+                                <button
+                                  type="button"
+                                  onClick={(event) =>
+                                    openTournamentTab(event, "Matched")
+                                  }
+                                  style={tournamentCountLinkStyle}
+                                >
+                                  {activeMatchCount}{" "}
+                                  {activeMatchCount === 1 ? "match" : "matches"}
+                                </button>
+                              </>
+                            )}
+                          </>
+                        );
+                      }
 
                       return isCurrentUserDirector ? (
                         <>
@@ -4832,9 +5361,34 @@ React.useEffect(() => {
                           </button>
                         </>
                       ) : (
-                        `${uniqueLookingCount} ${
-                          uniqueLookingCount === 1 ? "player" : "players"
-                        } looking`
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSessionReturnView(
+                              view === "mySessions" ? "mySessions" : "sessions"
+                            );
+                            setSelectedSessionId(session.session_instance_id);
+                            setSessionDetailFilter("Looking");
+                            setView("sessionDetail");
+                          }}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            padding: 0,
+                            color: "#4338ca",
+                            fontSize: "14px",
+                            fontFamily: "inherit",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            textDecoration: "underline",
+                            textUnderlineOffset: "3px",
+                          }}
+                        >
+                          {uniqueLookingCount}{" "}
+                          {uniqueLookingCount === 1 ? "player" : "players"}{" "}
+                          looking
+                        </button>
                       );
                     })()}
                   </div>
@@ -5874,6 +6428,8 @@ React.useEffect(() => {
         );
         return;
       }
+
+      rememberStandbyPreferences();
 
       const { data: standbyStatusData, error: standbyStatusError } =
         await supabase.rpc("get_player_standby_status", {
@@ -8290,6 +8846,7 @@ React.useEffect(() => {
                 <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                   <button
                     type="button"
+                    disabled={!directorMatchPartnerNumber}
                     onClick={async () => {
                       if (
                         !selectedSessionId ||
@@ -8353,8 +8910,13 @@ React.useEffect(() => {
                     }}
                     style={{
                       ...styles.matchButton,
-                      background: "#267c89",
-                      color: "white",
+                      background: directorMatchPartnerNumber
+                        ? "#267c89"
+                        : "#dbe4e7",
+                      color: directorMatchPartnerNumber ? "white" : "#829399",
+                      cursor: directorMatchPartnerNumber
+                        ? "pointer"
+                        : "not-allowed",
                     }}
                   >
                     Confirm Match
@@ -8362,6 +8924,7 @@ React.useEffect(() => {
 
                   <button
                     type="button"
+                    disabled={!directorMatchPartnerNumber}
                     onClick={() => {
                       setDirectorMatchRequest(null);
                       setDirectorMatchPartnerNumber("");
@@ -8370,8 +8933,13 @@ React.useEffect(() => {
                     }}
                     style={{
                       ...styles.matchButton,
-                      background: "#267c89",
-                      color: "white",
+                      background: directorMatchPartnerNumber
+                        ? "#267c89"
+                        : "#dbe4e7",
+                      color: directorMatchPartnerNumber ? "white" : "#829399",
+                      cursor: directorMatchPartnerNumber
+                        ? "pointer"
+                        : "not-allowed",
                     }}
                   >
                     Cancel
@@ -9636,6 +10204,31 @@ React.useEffect(() => {
                   {(sessionDetailFilter === "Looking" ||
                     isCurrentUserDirector) && (
                     <>
+                      {!isCurrentUserDirector &&
+                        sessionDetailFilter === "Looking" &&
+                        !currentMemberIsMatchedInSessionDetail &&
+                        !myRequest &&
+                        !currentStandbyRecord && (
+                          <div style={{ marginBottom: "18px" }}>
+                            <button
+                              type="button"
+                              onClick={openNewLookingRequestModal}
+                              style={{
+                                background: "#2b8792",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "999px",
+                                padding: "8px 16px",
+                                fontSize: "14px",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Add me to looking list
+                            </button>
+                          </div>
+                        )}
+
                       {uniqueSessionRequests.length === 0 && (
                         <p style={styles.text}>
                           No one is looking for a partner yet.
@@ -10867,6 +11460,7 @@ React.useEffect(() => {
               >
                 <Button
                   secondary={true}
+                  disabled={!directorMatchPartnerNumber}
                   onClick={async () => {
                     if (
                       !selectedSessionId ||
@@ -10967,6 +11561,7 @@ React.useEffect(() => {
 
                 <Button
                   secondary={true}
+                  disabled={!directorMatchPartnerNumber}
                   onClick={() => {
                     setDirectorMatchRequest(null);
                     setDirectorMatchPartnerSearch("");
@@ -11848,6 +12443,8 @@ React.useEffect(() => {
                       );
                       return;
                     }
+
+                    rememberStandbyPreferences();
 
                     const {
                       data: standbyStatusData,
@@ -13099,7 +13696,9 @@ React.useEffect(() => {
                     </div>
 
                     <div style={styles.text}>
-                      {chat.lastMessage?.message_text || "No messages yet."}
+                      {chat.lastMessage?.attachment_name
+                        ? `Attachment: ${chat.lastMessage.attachment_name}`
+                        : chat.lastMessage?.message_text || "No messages yet."}
                     </div>
                   </div>
                 </div>
@@ -13151,7 +13750,9 @@ React.useEffect(() => {
     const chatMessagingDisabled =
       isChatBlockStatusLoading || chatBlockStatus.conversationBlocked;
     const chatSendDisabled =
-      chatMessagingDisabled || !chatMessageText.trim();
+      chatMessagingDisabled ||
+      isChatAttachmentUploading ||
+      (!chatMessageText.trim() && !chatAttachmentFile);
     const chatBlockedByOtherOnly =
       chatBlockStatus.blockedMe && !chatBlockStatus.blockedByMe;
     const chatBlockButtonDisabled =
@@ -13339,7 +13940,79 @@ React.useEffect(() => {
                         padding: "10px 14px",
                       }}
                     >
-                      <div style={styles.text}>{message.message_text}</div>
+                      {message.message_text &&
+                        message.message_text !== "Attachment" && (
+                          <div style={styles.text}>{message.message_text}</div>
+                        )}
+
+                      {message.attachment_path && (
+                        <div
+                          style={{
+                            marginTop:
+                              message.message_text &&
+                              message.message_text !== "Attachment"
+                                ? "10px"
+                                : 0,
+                          }}
+                        >
+                          {String(message.attachment_type || "").startsWith(
+                            "image/"
+                          ) &&
+                          chatAttachmentUrls[message.attachment_path] ? (
+                            <a
+                              href={chatAttachmentUrls[message.attachment_path]}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ display: "block" }}
+                            >
+                              <img
+                                src={chatAttachmentUrls[message.attachment_path]}
+                                alt={message.attachment_name || "Chat attachment"}
+                                style={{
+                                  display: "block",
+                                  width: "min(100%, 360px)",
+                                  maxHeight: "320px",
+                                  objectFit: "contain",
+                                  borderRadius: "10px",
+                                }}
+                              />
+                            </a>
+                          ) : null}
+
+                          {chatAttachmentUrls[message.attachment_path] ? (
+                            <a
+                              href={chatAttachmentUrls[message.attachment_path]}
+                              target="_blank"
+                              rel="noreferrer"
+                              download={message.attachment_name || undefined}
+                              style={{
+                                display: "inline-block",
+                                marginTop: String(
+                                  message.attachment_type || ""
+                                ).startsWith("image/")
+                                  ? "8px"
+                                  : 0,
+                                color: "#4338ca",
+                                fontWeight: 700,
+                                textDecoration: "underline",
+                                textUnderlineOffset: "3px",
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              {message.attachment_name || "Download attachment"}
+                              {message.attachment_size
+                                ? ` (${formatAttachmentSize(
+                                    Number(message.attachment_size)
+                                  )})`
+                                : ""}
+                            </a>
+                          ) : (
+                            <span style={styles.smallText}>
+                              Private attachment unavailable
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       <div style={{ ...styles.smallText, marginTop: "4px" }}>
                         {new Date(message.created_at).toLocaleString("en-NZ", {
@@ -13374,6 +14047,89 @@ React.useEffect(() => {
               <div style={styles.chatBlockError}>{chatBlockError}</div>
             )}
 
+            <input
+              ref={chatAttachmentInputRef}
+              type="file"
+              accept=".doc,.docx,.txt,.pdf,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp,image/*"
+              disabled={chatMessagingDisabled || isChatAttachmentUploading}
+              onChange={(event) => {
+                const selectedFile = event.target.files?.[0] || null;
+                if (!selectedFile) return;
+                const validationError = validateChatAttachment(selectedFile);
+                if (validationError) {
+                  setChatAttachmentFile(null);
+                  setChatAttachmentError(validationError);
+                  event.target.value = "";
+                  return;
+                }
+                setChatAttachmentFile(selectedFile);
+                setChatAttachmentError("");
+              }}
+              style={{ display: "none" }}
+            />
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                flexWrap: "wrap",
+                marginBottom: "12px",
+              }}
+            >
+              <button
+                type="button"
+                disabled={chatMessagingDisabled || isChatAttachmentUploading}
+                onClick={() => chatAttachmentInputRef.current?.click()}
+                style={{
+                  ...styles.compactSecondaryAction,
+                  opacity:
+                    chatMessagingDisabled || isChatAttachmentUploading ? 0.6 : 1,
+                  cursor:
+                    chatMessagingDisabled || isChatAttachmentUploading
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                Attach file
+              </button>
+
+              {chatAttachmentFile && (
+                <div style={{ ...styles.smallText, minWidth: 0 }}>
+                  <strong>{chatAttachmentFile.name}</strong>{" "}
+                  ({formatAttachmentSize(chatAttachmentFile.size)})
+                  <button
+                    type="button"
+                    disabled={isChatAttachmentUploading}
+                    onClick={() => {
+                      setChatAttachmentFile(null);
+                      setChatAttachmentError("");
+                      if (chatAttachmentInputRef.current) {
+                        chatAttachmentInputRef.current.value = "";
+                      }
+                    }}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "#4338ca",
+                      marginLeft: "8px",
+                      padding: 0,
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {chatAttachmentError && (
+              <div style={{ ...styles.chatBlockError, marginBottom: "12px" }}>
+                {chatAttachmentError}
+              </div>
+            )}
+
             <textarea
               value={chatMessageText}
               onChange={(event) => setChatMessageText(event.target.value)}
@@ -13402,7 +14158,61 @@ React.useEffect(() => {
               type="button"
               disabled={chatSendDisabled}
               onClick={async () => {
-              if (!currentMember || !chatPartner || !chatMessageText.trim()) return;
+              if (
+                !currentMember ||
+                !chatPartner ||
+                (!chatMessageText.trim() && !chatAttachmentFile)
+              ) return;
+
+              setChatAttachmentError("");
+              setIsChatAttachmentUploading(true);
+
+              let uploadedAttachmentPath: string | null = null;
+
+              if (chatAttachmentFile) {
+                const validationError = validateChatAttachment(chatAttachmentFile);
+                if (validationError) {
+                  setChatAttachmentError(validationError);
+                  setIsChatAttachmentUploading(false);
+                  return;
+                }
+
+                const participantNumbers = [
+                  Number(currentMember.nz_bridge_number),
+                  Number(chatPartner.nz_bridge_number),
+                ].sort((first, second) => first - second);
+                const uniqueFilePart =
+                  typeof crypto.randomUUID === "function"
+                    ? crypto.randomUUID()
+                    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                uploadedAttachmentPath = `${participantNumbers[0]}-${participantNumbers[1]}/${uniqueFilePart}-${safeChatAttachmentName(chatAttachmentFile.name)}`;
+
+                const { error: uploadAttachmentError } = await supabase.storage
+                  .from(CHAT_ATTACHMENT_BUCKET)
+                  .upload(uploadedAttachmentPath, chatAttachmentFile, {
+                    cacheControl: "3600",
+                    contentType:
+                      chatAttachmentFile.type || "application/octet-stream",
+                    upsert: false,
+                  });
+
+                if (uploadAttachmentError) {
+                  console.warn(
+                    "Upload chat attachment error:",
+                    JSON.stringify(uploadAttachmentError, null, 2)
+                  );
+                  const uploadErrorText = String(
+                    uploadAttachmentError.message || ""
+                  ).toLowerCase();
+                  setChatAttachmentError(
+                    uploadErrorText.includes("bucket not found")
+                      ? "Chat attachments are not configured in Supabase yet. Apply the chat attachment migrations, then try again."
+                      : "The attachment could not be uploaded. Please try again."
+                  );
+                  setIsChatAttachmentUploading(false);
+                  return;
+                }
+              }
 
               console.log("CHAT SEND VALUES:", {
                 currentMemberNzBridgeNumber: currentMember.nz_bridge_number,
@@ -13415,13 +14225,22 @@ React.useEffect(() => {
                   .insert({
                     from_nz_bridge_number: Number(currentMember.nz_bridge_number),
                     to_nz_bridge_number: Number(chatPartner.nz_bridge_number),
-                    message_text: chatMessageText.trim(),
+                    message_text: chatMessageText.trim() || "Attachment",
                     is_read: false,
+                    attachment_path: uploadedAttachmentPath,
+                    attachment_name: chatAttachmentFile?.name || null,
+                    attachment_type: chatAttachmentFile?.type || null,
+                    attachment_size: chatAttachmentFile?.size || null,
                   })
                   .select("message_id")
                   .single();
 
                 if (sendMessageError) {
+                  if (uploadedAttachmentPath) {
+                    await supabase.storage
+                      .from(CHAT_ATTACHMENT_BUCKET)
+                      .remove([uploadedAttachmentPath]);
+                  }
                   console.error(
                     "Send chat message error:",
                     JSON.stringify(sendMessageError, null, 2)
@@ -13448,6 +14267,7 @@ React.useEffect(() => {
                   } else {
                     setChatBlockError("Your message could not be sent.");
                   }
+                  setIsChatAttachmentUploading(false);
                   return;
                 }
 
@@ -13459,7 +14279,7 @@ React.useEffect(() => {
                       ? Number(insertedChatMessage.message_id)
                       : null,
                     notification_type: "ChatMessage",
-                    message: `${currentMember?.first_name} ${currentMember?.last_name} sent you a chat message.`,
+                    message: `${currentMember?.first_name} ${currentMember?.last_name} sent you ${chatAttachmentFile ? "a chat attachment" : "a chat message"}.`,
                     is_read: false,
                   });
 
@@ -13471,14 +14291,19 @@ React.useEffect(() => {
                 }
 
                 setChatMessageText("");
+                setChatAttachmentFile(null);
+                if (chatAttachmentInputRef.current) {
+                  chatAttachmentInputRef.current.value = "";
+                }
                 await refreshSupabaseData();
+                setIsChatAttachmentUploading(false);
               }}
               style={{
                 ...styles.compactPrimaryAction,
                 cursor: chatSendDisabled ? "not-allowed" : "pointer",
               }}
             >
-              Send
+              {isChatAttachmentUploading ? "Sending..." : "Send"}
             </button>
           </Card>
 
