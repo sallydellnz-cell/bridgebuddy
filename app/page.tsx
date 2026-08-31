@@ -1046,6 +1046,9 @@ export default function BridgeBuddy() {
     useState("");
   const [directorySurnameSearch, setDirectorySurnameSearch] = useState("");
   const [directoryClubSearch, setDirectoryClubSearch] = useState("");
+  const [directorySortBy, setDirectorySortBy] = useState<
+    "firstName" | "surname"
+  >("firstName");
 
   React.useEffect(() => {
     if (!currentMember?.nz_bridge_number) {
@@ -3411,9 +3414,36 @@ React.useEffect(() => {
         if (aIsCurrent && !bIsCurrent) return -1;
         if (!aIsCurrent && bIsCurrent) return 1;
 
-        return `${a.first_name || ""} ${a.last_name || ""}`.localeCompare(
-          `${b.first_name || ""} ${b.last_name || ""}`
-        );
+        const getVisibleDirectoryName = (player: any) => {
+          const playerNumber = Number(
+            player.nz_bridge_number || player.member_id
+          );
+          const visibleProfile = visibleMemberProfiles[String(playerNumber)];
+
+          return {
+            firstName: String(
+              visibleProfile?.first_name || player.first_name || ""
+            ).trim(),
+            surname: String(
+              visibleProfile?.last_name || player.last_name || ""
+            ).trim(),
+          };
+        };
+
+        const aName = getVisibleDirectoryName(a);
+        const bName = getVisibleDirectoryName(b);
+        const aSortValue =
+          directorySortBy === "surname"
+            ? `${aName.surname}\u0000${aName.firstName}`
+            : `${aName.firstName}\u0000${aName.surname}`;
+        const bSortValue =
+          directorySortBy === "surname"
+            ? `${bName.surname}\u0000${bName.firstName}`
+            : `${bName.firstName}\u0000${bName.surname}`;
+
+        return aSortValue.localeCompare(bSortValue, undefined, {
+          sensitivity: "base",
+        });
       });
 
   async function createRequest() {
@@ -14508,6 +14538,22 @@ React.useEffect(() => {
                     {clubName}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label style={styles.directorySearchField}>
+              <span style={styles.directorySearchLabel}>Sort by</span>
+              <select
+                value={directorySortBy}
+                onChange={(event) =>
+                  setDirectorySortBy(
+                    event.target.value as "firstName" | "surname"
+                  )
+                }
+                style={styles.directorySearchSelect}
+                aria-label="Sort players by"
+              >
+                <option value="firstName">First name</option>
+                <option value="surname">Surname</option>
               </select>
             </label>
             {directoryFiltersActive && (
