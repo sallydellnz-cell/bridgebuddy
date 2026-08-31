@@ -134,71 +134,133 @@ function Nav({
     { viewName: "account", label: "Account", icon: "⚙", count: 0 },
   ];
 
+  const goBackOneStep = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
+    if (view !== "sessions") {
+      setView("sessions");
+    }
+  };
+
   return (
-    <div
-      style={{
-        position: "fixed",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "#f8fafc",
-        borderTop: "1px solid #cbd5e1",
-        padding: "8px 16px 10px",
-        zIndex: 50,
-      }}
-    >
+    <>
       <div
         style={{
           width: "100%",
           maxWidth: "1000px",
-          margin: "0 auto",
-          background: "rgba(255, 255, 255, 0.96)",
-          border: "1px solid #c7d2fe",
-          borderRadius: "24px",
-          boxShadow: "0 10px 35px rgba(15, 23, 42, 0.14)",
-          padding: "8px",
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: "30px",
+          margin: "0 auto 12px",
+          display: "flex",
+          justifyContent: "flex-start",
         }}
       >
-        {mainMenuItems.map((item) => {
-          const isActive =
-            view === item.viewName ||
-            (item.viewName === "chats" && view === "chat");
-
-          return (
-            <button
-              key={item.viewName}
-              type="button"
-              onClick={() => setView(item.viewName)}
-              style={{
-                border: "none",
-                borderRadius: "18px",
-                background: isActive ? "#4338ca" : "#e0e7ff",
-                color: isActive ? "white" : "#3730a3",
-                padding: "9px 8px",
-                fontSize: "13px",
-                fontWeight: 700,
-                cursor: "pointer",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "3px",
-                minHeight: "56px",
-              }}
-            >
-              <span style={{ fontSize: "19px", lineHeight: 1 }}>{item.icon}</span>
-              <span>
-                {item.label}
-                {item.count > 0 ? ` (${item.count})` : ""}
-              </span>
-            </button>
-          );
-        })}
+        <button
+          type="button"
+          onClick={goBackOneStep}
+          aria-label="Go back one step"
+          title="Back"
+          style={{
+            width: "42px",
+            height: "42px",
+            padding: 0,
+            border: "1px solid #cbd5e1",
+            borderRadius: "50%",
+            background: "#ffffff",
+            color: "#475569",
+            boxShadow: "0 4px 14px rgba(15, 23, 42, 0.12)",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M15 18 9 12l6-6"
+              stroke="currentColor"
+              strokeWidth="2.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       </div>
-    </div>
+
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "#f8fafc",
+          borderTop: "1px solid #cbd5e1",
+          padding: "8px 16px 10px",
+          zIndex: 50,
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "1000px",
+            margin: "0 auto",
+            background: "rgba(255, 255, 255, 0.96)",
+            border: "1px solid #c7d2fe",
+            borderRadius: "24px",
+            boxShadow: "0 10px 35px rgba(15, 23, 42, 0.14)",
+            padding: "8px",
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: "30px",
+          }}
+        >
+          {mainMenuItems.map((item) => {
+            const isActive =
+              view === item.viewName ||
+              (item.viewName === "chats" && view === "chat");
+
+            return (
+              <button
+                key={item.viewName}
+                type="button"
+                onClick={() => setView(item.viewName)}
+                style={{
+                  border: "none",
+                  borderRadius: "18px",
+                  background: isActive ? "#4338ca" : "#e0e7ff",
+                  color: isActive ? "white" : "#3730a3",
+                  padding: "9px 8px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "3px",
+                  minHeight: "56px",
+                }}
+              >
+                <span style={{ fontSize: "19px", lineHeight: 1 }}>
+                  {item.icon}
+                </span>
+                <span>
+                  {item.label}
+                  {item.count > 0 ? ` (${item.count})` : ""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 }
 
