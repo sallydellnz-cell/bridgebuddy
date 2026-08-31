@@ -1584,11 +1584,16 @@ React.useEffect(() => {
   const [chatBlockStatusesByNumber, setChatBlockStatusesByNumber] = useState<
     Record<string, boolean>
   >({});
-  const chatAvatarNumbersKey = React.useMemo(() => {
+  const memberAvatarNumbersKey = React.useMemo(() => {
     if (!currentMember?.nz_bridge_number) return "";
 
     const currentNumber = String(currentMember.nz_bridge_number);
-    const avatarNumbers = supabaseChatMessages
+    const avatarNumbers = supabaseMembers
+      .map((member) => Number(member.nz_bridge_number))
+      .filter((profileNumber: number) => Number.isFinite(profileNumber));
+
+    avatarNumbers.push(
+      ...supabaseChatMessages
       .filter(
         (message: any) =>
           String(message.from_nz_bridge_number) === currentNumber ||
@@ -1599,7 +1604,8 @@ React.useEffect(() => {
           ? Number(message.to_nz_bridge_number)
           : Number(message.from_nz_bridge_number)
       )
-      .filter((profileNumber: number) => Number.isFinite(profileNumber));
+      .filter((profileNumber: number) => Number.isFinite(profileNumber))
+    );
 
     const selectedPartnerNumber = Number(chatPartner?.nz_bridge_number);
     if (Number.isFinite(selectedPartnerNumber)) {
@@ -1609,19 +1615,20 @@ React.useEffect(() => {
     return [...new Set(avatarNumbers)].sort((a, b) => a - b).join(",");
   }, [
     currentMember?.nz_bridge_number,
+    supabaseMembers,
     supabaseChatMessages,
     chatPartner?.nz_bridge_number,
   ]);
 
   React.useEffect(() => {
-    if (!currentMember?.nz_bridge_number || !chatAvatarNumbersKey) {
+    if (!currentMember?.nz_bridge_number || !memberAvatarNumbersKey) {
       setMemberAvatarDisplays({});
       setChatBlockStatusesByNumber({});
       return;
     }
 
     let cancelled = false;
-    const avatarNumbers = chatAvatarNumbersKey
+    const avatarNumbers = memberAvatarNumbersKey
       .split(",")
       .map((profileNumber) => Number(profileNumber))
       .filter((profileNumber) => Number.isFinite(profileNumber));
@@ -1688,7 +1695,7 @@ React.useEffect(() => {
     return () => {
       cancelled = true;
     };
-  }, [currentMember?.nz_bridge_number, chatAvatarNumbersKey]);
+  }, [currentMember?.nz_bridge_number, memberAvatarNumbersKey]);
 
   React.useEffect(() => {
     if (
