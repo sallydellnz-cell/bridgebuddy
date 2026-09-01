@@ -7579,12 +7579,6 @@ React.useEffect(() => {
                               </div>
                             </div>
 
-                            {!isOwnRequest &&
-                              !isCurrentUserDirector &&
-                              renderVisiblePlayerCardDetails(
-                                request.nz_bridge_number
-                              )}
-
                             {renderLookingPreferences(request)}
 
                             {isOwnRequest && !isCurrentUserDirector && (
