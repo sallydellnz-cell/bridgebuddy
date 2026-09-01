@@ -5018,7 +5018,7 @@ React.useEffect(() => {
                   : currentMemberLookingForSession
                     ? "You are looking"
                     : currentMemberInterestedForSession
-                      ? "Interest pending"
+                      ? "You have expressed interest"
                       : currentMemberStandbyForSession
                         ? "You are standby"
                         : null;
@@ -5227,6 +5227,20 @@ React.useEffect(() => {
                             </span>
                           </>
                         );
+                      }
+
+                      if (
+                        view === "mySessions" &&
+                        currentMemberLookingForSession
+                      ) {
+                        return <>You are looking</>;
+                      }
+
+                      if (
+                        view === "mySessions" &&
+                        currentMemberInterestedForSession
+                      ) {
+                        return <>You have expressed interest</>;
                       }
 
                       const matchedPlayerNumbersForThisSession = supabaseMatches
