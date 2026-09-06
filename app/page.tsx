@@ -154,8 +154,9 @@ function Nav({
           width: "100%",
           maxWidth: "1000px",
           margin: "0 auto 12px",
+          position: "relative",
           display: "flex",
-          justifyContent: "flex-start",
+          justifyContent: "space-between",
         }}
       >
         <button
@@ -197,6 +198,16 @@ function Nav({
         {isDirector && (
           <span
             style={{
+              position: "absolute",
+              right: "20px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: "18px",
+              fontFamily: "Arial, sans-serif",
+              whiteSpace: "nowrap",
               flexShrink: 0,
               padding: "3px 10px",
               borderRadius: "999px",
