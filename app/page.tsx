@@ -103,6 +103,7 @@ function Button({
 }
 
 function Nav({
+  isDirector,
   view,
   setView,
   notifications,
@@ -116,6 +117,7 @@ function Nav({
   unreadNotifications: any[];
   unreadChatCount: number;
   matchCount: number;
+  isDirector: boolean;
 }) {
   const mainMenuItems = [
     { viewName: "sessions", label: "Calendar", icon: "📅", count: 0 },
@@ -192,6 +194,21 @@ function Nav({
             />
           </svg>
         </button>
+        {isDirector && (
+          <span
+            style={{
+              flexShrink: 0,
+              padding: "3px 10px",
+              borderRadius: "999px",
+              background: "#dc2626",
+              color: "white",
+              fontSize: "12px",
+              fontWeight: 700,
+            }}
+          >
+            Director
+          </span>
+        )}
       </div>
 
       <div
@@ -3709,6 +3726,7 @@ React.useEffect(() => {
       <main style={styles.page}>
         <div style={styles.container}>
           <Nav
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -4730,6 +4748,7 @@ React.useEffect(() => {
             }}
           >
           <Nav
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -7119,6 +7138,7 @@ React.useEffect(() => {
       <main style={styles.page}>
         <div style={styles.container}>
           <Nav
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={navigateFromSessionDetail}
             notifications={notifications}
@@ -9931,6 +9951,7 @@ React.useEffect(() => {
       <main style={styles.page}>
         <div style={styles.container}>
           <Nav
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={navigateFromSessionDetail}
             notifications={notifications}
@@ -10024,21 +10045,7 @@ React.useEffect(() => {
                 </span>
               </div>
 
-              {isCurrentUserDirector && (
-                <span
-                  style={{
-                    flexShrink: 0,
-                    padding: "3px 10px",
-                    borderRadius: "999px",
-                    background: "#dc2626",
-                    color: "white",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                  }}
-                >
-                  Director
-                </span>
-              )}
+
             </div>
    
             <div style={{ marginTop: "24px" }}>
@@ -12679,6 +12686,7 @@ React.useEffect(() => {
       <main style={styles.page}>
         <div style={styles.container}>
           <Nav
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -12786,6 +12794,7 @@ React.useEffect(() => {
       <main style={styles.page}>
         <div style={styles.container}>
           <Nav
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -13289,6 +13298,7 @@ React.useEffect(() => {
     <main style={styles.page}>
       <div style={styles.container}>
           <Nav
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -13715,6 +13725,7 @@ React.useEffect(() => {
       <main style={styles.page}>
         <div style={styles.container}>
           <Nav
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -13909,6 +13920,7 @@ React.useEffect(() => {
       <main style={styles.page}>
         <div style={styles.container}>
           <Nav
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -14474,6 +14486,7 @@ React.useEffect(() => {
       <main style={styles.page}>
         <div style={styles.container}>
           <Nav
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
