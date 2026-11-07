@@ -3,6 +3,30 @@
 import { supabase } from "@/lib/supabase";
 import React, { useEffect, useMemo, useState } from "react";
 import { loadCsv } from "../lib/loadCsv";
+import { StaffProfileFields, StaffProfile, emptyStaffProfile, staffRoleFor } from "./staff-profile";
+
+function ModalBackdrop({
+  onDismiss,
+  dismissDisabled = false,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & {
+  onDismiss: () => void;
+  dismissDisabled?: boolean;
+}) {
+  return (
+    <div
+      {...props}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !dismissDisabled) {
+          onDismiss();
+        }
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 function PeopleGroupIcon() {
   return (
@@ -103,6 +127,7 @@ function Button({
 }
 
 function Nav({
+  roleTitle,
   view,
   setView,
   notifications,
@@ -116,6 +141,7 @@ function Nav({
   unreadNotifications: any[];
   unreadChatCount: number;
   matchCount: number;
+  roleTitle?: string;
 }) {
   const mainMenuItems = [
     { viewName: "sessions", label: "Calendar", icon: "📅", count: 0 },
@@ -152,8 +178,11 @@ function Nav({
           width: "100%",
           maxWidth: "1000px",
           margin: "0 auto 12px",
+          position: "relative",
           display: "flex",
-          justifyContent: "flex-start",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "16px",
         }}
       >
         <button
@@ -192,6 +221,31 @@ function Nav({
             />
           </svg>
         </button>
+        {roleTitle && (
+          <span
+            style={{
+              position: "absolute",
+              right: "20px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: "18px",
+              fontFamily: "Arial, sans-serif",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              padding: "3px 10px",
+              borderRadius: "999px",
+              background: "#dc2626",
+              color: "white",
+              fontSize: "12px",
+              fontWeight: 700,
+            }}
+          >
+            {roleTitle}
+          </span>
+        )}
       </div>
 
       <div
@@ -292,10 +346,8 @@ function PersonalMenu({
 
   return (
     <div
+      className="personal-menu"
       style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 40,
         display: "grid",
         gridTemplateColumns: "repeat(4, 1fr)",
         gap: "30px",
@@ -759,8 +811,32 @@ function tabSlug(tab: string) {
   return tab.toLowerCase().replace(/\s+/g, "-");
 }
 
+function directorPartnerClub(member: any) {
+  return String(member.clubs || member.club_name || "Club not listed").trim();
+}
+
+function directorPartnerLevel(member: any, members: any[], profiles: Record<string, any>) {
+  const profile = members.find(
+    (candidate: any) => String(candidate.nz_bridge_number) === String(member.nz_bridge_number)
+  ) || member;
+  return profiles[String(member.nz_bridge_number)]?.nz_bridge_level || profile.nz_bridge_level || "Level not recorded";
+}
+
+function compareDirectorPartners(first: any, second: any, looking: Set<string>, clubId: string) {
+  const priority = (member: any) => looking.has(String(member.nz_bridge_number))
+    ? 0
+    : String(member.club_id) === clubId ? 1 : 2;
+  return priority(first) - priority(second) ||
+    (priority(first) === 2 ? directorPartnerClub(first).localeCompare(directorPartnerClub(second)) : 0) ||
+    `${first.first_name || ""} ${first.last_name || ""}`.localeCompare(
+      `${second.first_name || ""} ${second.last_name || ""}`
+    );
+}
+
 export default function BridgeBuddy() {
   const [supabaseMembers, setSupabaseMembers] = useState<any[]>([]);
+  const [staffProfiles, setStaffProfiles] = useState<Record<string, any>>({});
+  const [staffDraft, setStaffDraft] = useState<StaffProfile>(emptyStaffProfile());
   const [supabaseLevels, setSupabaseLevels] = useState<any[]>([]);
   const [supabaseSystems, setSupabaseSystems] = useState<any[]>([]);
   const [supabaseSessions, setSupabaseSessions] = useState<any[]>([]);
@@ -784,7 +860,7 @@ export default function BridgeBuddy() {
       .order("start_time", { ascending: true });
 
     const { data: membersData, error: membersError } = await supabase
-      .from("members_current")
+      .from("bridgebuddy_players")
       .select("*");
 
     const { data: levelsData, error: levelsError } = await supabase
@@ -868,8 +944,16 @@ export default function BridgeBuddy() {
         tournamentPairRegistrationsError
       );
     }
+    const { data: staffData, error: staffError } = await supabase.rpc("get_staff_profiles");
+    if (staffError) console.error("Load Admin/Director profiles:", staffError.message);
+    else setStaffProfiles(Object.fromEntries((staffData || []).map((profile: any) => [String(profile.nz_bridge_number), profile])));
     if (membersData) setSupabaseMembers(membersData);
-    if (data) setSupabaseSessions(data);
+    if (data) setSupabaseSessions(data.map((session) => ({
+      ...session,
+      session_name: session.session_name === "Pairs" && session.session_date
+        ? `${new Date(`${session.session_date}T12:00:00`).toLocaleDateString("en-NZ", { month: "long" })} Pairs`
+        : session.session_name,
+    })));
     if (levelsData) setSupabaseLevels(levelsData);
     if (systemsData) setSupabaseSystems(systemsData);    
     if (requestData) setSupabaseRequests(requestData);
@@ -999,12 +1083,25 @@ export default function BridgeBuddy() {
   const [showConfirmLoginPassword, setShowConfirmLoginPassword] =
     useState(false);
   const [rememberLogin, setRememberLogin] = useState(false);
-  const [hasRestoredSavedLogin, setHasRestoredSavedLogin] = useState(false);
+  const authLoadVersion = React.useRef(0);
   const [foundMembers, setFoundMembers] = useState<any[]>([]);
   const [verificationSent, setVerificationSent] = useState(false);
   const [verificationCode, setVerificationCode] = useState(""); 
   const [selectedLevel, setSelectedLevel] = useState("");
   const [currentMember, setCurrentMember] = useState<any>(null);
+  const isCurrentUserDirector = supabaseClubMemberRoles.some(
+    (role: any) =>
+      String(role.nz_bridge_number) === String(currentMember?.nz_bridge_number) &&
+      String(role.club_id) === String(currentMember?.club_id) &&
+      role.role_name === "Director" &&
+      role.is_current === true
+  );
+
+  const currentStaffRole = staffRoleFor(currentMember, supabaseClubMemberRoles);
+  const isCurrentUserStaff = !!currentStaffRole;
+  const accountStaffProfile: StaffProfile = staffProfiles[String(currentMember?.nz_bridge_number)] ||
+    emptyStaffProfile(currentStaffRole?.role_name || "", currentMember?.email || "");
+  const [isRestoringLogin, setIsRestoringLogin] = useState(true);
   const [accountProfile, setAccountProfile] = useState({
     avatarKey: "initials",
     avatarPhotoPath: null as string | null,
@@ -1153,8 +1250,40 @@ export default function BridgeBuddy() {
     };
   }, [currentMember?.nz_bridge_number]);
 
+  // Only live profiles have the player keys required by profile/avatar RPCs.
+  // The legacy CSV is a membership lookup source, not a second directory.
+  React.useEffect(() => {
+    if (!isAccountEditing) setStaffDraft(staffProfiles[String(currentMember?.nz_bridge_number)] ||
+      emptyStaffProfile(staffRoleFor(currentMember, supabaseClubMemberRoles)?.role_name || "", currentMember?.email || ""));
+  }, [staffProfiles, currentMember, supabaseClubMemberRoles, isAccountEditing]);
+
+  const directoryMembers = React.useMemo(() => {
+    const legacyDirectoryEmails = new Set(
+      csvMembers
+        .filter(member => String(member.profile_completed || "").trim().toLowerCase() === "yes")
+        .map(member => String(member.email || "").trim().toLowerCase())
+        .filter(Boolean)
+    );
+    const completed = supabaseMembers.filter(
+      member => String(member.profile_completed || "").trim().toLowerCase() === "yes"
+        || legacyDirectoryEmails.has(String(member.email || "").trim().toLowerCase())
+        || !!staffRoleFor(member, supabaseClubMemberRoles)
+    );
+    const seenNumbers = new Set<string>();
+    return completed.filter(member => {
+      const rawNumber = String(member.nz_bridge_number || "").trim();
+      const number = rawNumber && Number.isFinite(Number(rawNumber))
+        ? String(Number(rawNumber))
+        : "";
+      if (!number || seenNumbers.has(number)) return false;
+      seenNumbers.add(number);
+      return true;
+    }).map(member => ({ ...member, profile_completed: "yes" }));
+  }, [csvMembers, supabaseMembers, supabaseClubMemberRoles]);
+
   const visibleProfileNumbersKey = React.useMemo(() => {
     const profileNumbers = [
+      ...(isCurrentUserDirector ? supabaseMembers.map((member: any) => member.nz_bridge_number) : []),
       ...supabaseRequests.map((request: any) => request.nz_bridge_number),
       ...supabaseRequestRecords.map(
         (request: any) => request.nz_bridge_number
@@ -1162,7 +1291,7 @@ export default function BridgeBuddy() {
       ...supabaseInterests.map(
         (interest: any) => interest.interested_nz_bridge_number
       ),
-      ...csvMembers
+      ...directoryMembers
         .filter(
           (member: any) =>
             String(member.profile_completed || "").toLowerCase() === "yes"
@@ -1177,7 +1306,9 @@ export default function BridgeBuddy() {
     supabaseRequests,
     supabaseRequestRecords,
     supabaseInterests,
-    csvMembers,
+    directoryMembers,
+    isCurrentUserDirector,
+    supabaseMembers,
   ]);
 
   React.useEffect(() => {
@@ -1195,15 +1326,14 @@ export default function BridgeBuddy() {
     async function loadVisibleMemberProfiles() {
       const profileResponses = await Promise.all(
         profileNumbers.map(async (profileNumber) => {
-          const { data, error } = await supabase.rpc(
-            "get_visible_member_profile",
-            {
-              p_target_nz_bridge_number: profileNumber,
-              p_viewer_nz_bridge_number: Number(
-                currentMember.nz_bridge_number
-              ),
-            }
-          );
+          const { data, error } = await (isCurrentUserDirector
+            ? supabase.rpc("get_director_member_profile", {
+                p_target_nz_bridge_number: profileNumber,
+              })
+            : supabase.rpc("get_visible_member_profile", {
+                p_target_nz_bridge_number: profileNumber,
+                p_viewer_nz_bridge_number: Number(currentMember.nz_bridge_number),
+              }));
 
           return {
             profileNumber,
@@ -1226,7 +1356,7 @@ export default function BridgeBuddy() {
     return () => {
       cancelled = true;
     };
-  }, [currentMember?.nz_bridge_number, visibleProfileNumbersKey]);
+  }, [currentMember?.nz_bridge_number, visibleProfileNumbersKey, isCurrentUserDirector]);
 
   function renderVisiblePlayerCardDetails(nzBridgeNumber: any) {
     const visibleProfile =
@@ -1360,7 +1490,17 @@ export default function BridgeBuddy() {
     const profileConversationBlocked =
       chatBlockStatusesByNumber[profileNumberKey] === true;
 
-    const modalDetails = [
+    const staffMember = supabaseMembers.find((member: any) => String(member.nz_bridge_number) === profileNumberKey);
+    const isStaffProfile = !!staffRoleFor(staffMember, supabaseClubMemberRoles);
+    const publicStaffProfile = staffProfiles[profileNumberKey];
+    const modalDetails = isStaffProfile ? [
+      { key: "club", label: "Club", value: publicStaffProfile?.clubs },
+      { key: "role", label: "Role/title", value: publicStaffProfile?.role_title },
+      { key: "email", label: "Email", value: publicStaffProfile?.contact_email },
+      { key: "phone", label: "Contact phone", value: publicStaffProfile?.contact_phone },
+      { key: "help", label: "Can help with", value: publicStaffProfile?.responsibilities?.join(", ") },
+      { key: "about", label: "About / Notes", value: publicStaffProfile?.about },
+    ].filter(detail => !!detail.value) : [
       {
         key: "playing-levels",
         label: "Playing levels",
@@ -1406,7 +1546,7 @@ export default function BridgeBuddy() {
     ].filter((detail) => detail.visible);
 
     return (
-      <div
+      <ModalBackdrop onDismiss={() => setProfileToView(null)}
         style={{
           position: "fixed",
           inset: 0,
@@ -1421,7 +1561,7 @@ export default function BridgeBuddy() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Player profile"
+          aria-label={isStaffProfile ? "Admin/Director profile" : "Player profile"}
           style={{
             background: "white",
             borderRadius: "20px",
@@ -1463,7 +1603,7 @@ export default function BridgeBuddy() {
                   <div style={styles.playerProfileDetailLabel}>
                     {detail.label}
                   </div>
-                  <div style={styles.playerProfileDetailValue}>
+                  <div style={{ ...styles.playerProfileDetailValue, whiteSpace: "pre-wrap" }}>
                     {detail.value}
                   </div>
                 </div>
@@ -1509,23 +1649,16 @@ export default function BridgeBuddy() {
             <button
               type="button"
               onClick={() => setProfileToView(null)}
-              style={styles.compactSecondaryAction}
+              style={styles.compactPrimaryAction}
             >
               Close
             </button>
           </div>
         </div>
-      </div>
+      </ModalBackdrop>
     );
   }
 
-  const isCurrentUserDirector = supabaseClubMemberRoles.some(
-    (role: any) =>
-      String(role.nz_bridge_number) === String(currentMember?.nz_bridge_number) &&
-      String(role.club_id) === String(currentMember?.club_id) &&
-      role.role_name === "Director" &&
-      role.is_current === true
-  );
 
 React.useEffect(() => {
   loadCsv("/sessions.csv").then((data: any) => {
@@ -1545,6 +1678,7 @@ React.useEffect(() => {
   const [tournamentPairSort, setTournamentPairSort] = useState("nameAsc");
   const [sessionReturnView, setSessionReturnView] = useState("sessions");
   const [scrollToSessionId, setScrollToSessionId] = useState<string | null>(null);
+  const [calendarLinkedSessionId, setCalendarLinkedSessionId] = useState<string | null>(null);
   const [highlightedSessionId, setHighlightedSessionId] = useState<string | null>(null);
   const [profileToView, setProfileToViewState] = useState<any>(null);
   const profileViewRequestId = React.useRef(0);
@@ -1565,6 +1699,13 @@ React.useEffect(() => {
       return;
     }
 
+    const staffMember = supabaseMembers.find((member: any) => String(member.nz_bridge_number) === String(targetNzBridgeNumber));
+    if (staffRoleFor(staffMember, supabaseClubMemberRoles)) {
+      const staffProfile = staffProfiles[String(targetNzBridgeNumber)];
+      setProfileToViewState({ ...staffMember, ...staffProfile, _profileLoadError: !staffProfile });
+      return;
+    }
+
     const safeIdentity = {
       nz_bridge_number: targetNzBridgeNumber,
       first_name: profile.first_name || "Unknown",
@@ -1574,14 +1715,18 @@ React.useEffect(() => {
 
     setProfileToViewState(safeIdentity);
 
-    void supabase
-      .rpc("get_visible_member_profile", {
+    const profileLookup = isCurrentUserDirector
+      ? supabase.rpc("get_director_member_profile", {
+          p_target_nz_bridge_number: targetNzBridgeNumber,
+        })
+      : supabase.rpc("get_visible_member_profile", {
         p_target_nz_bridge_number: targetNzBridgeNumber,
         p_viewer_nz_bridge_number: currentMember?.nz_bridge_number
           ? Number(currentMember.nz_bridge_number)
           : null,
-      })
-      .then(({ data, error }) => {
+      });
+
+    void profileLookup.then(({ data, error }) => {
         if (requestId !== profileViewRequestId.current) return;
 
         if (error || !data) {
@@ -1896,7 +2041,10 @@ React.useEffect(() => {
   
   const [selectedProfileMember, setSelectedProfileMember] = useState<any>(null);
   const [showForm, setShowForm] = useState(false);
-  const [view, setView] = useState("landing");
+  const [requestedView, setView] = useState("landing");
+  const view = !isRestoringLogin && !currentMember?.nz_bridge_number
+    ? "landing"
+    : requestedView;
   const isApplyingBrowserHistory = React.useRef(false);
   const hasAppliedInitialBrowserRoute = React.useRef(false);
 
@@ -1945,12 +2093,28 @@ React.useEffect(() => {
     };
   }, [view, currentMember, chatPartner, supabaseChatMessages]);
 
-  const applyBrowserRoute = React.useCallback(() => {
+  const applyBrowserRoute = React.useCallback((restoreCalendarPosition = false) => {
     const route = readBrowserRoute();
+    // Wait for route lookup data on first load, rather than reapplying the
+    // route after every refresh of members and sessions.
+    if (route.sessionId && !supabaseSessions.some(
+      (session: any) => String(session.session_instance_id) === String(route.sessionId)
+    )) return;
+    if (route.memberNumber && supabaseMembers.length === 0) return;
     isApplyingBrowserHistory.current = true;
 
     setProfileToView(null);
     setView(route.view);
+
+    // The top back arrow uses popstate, bypassing navigateFromSessionDetail.
+    // Restore the session after the calendar cards have mounted again.
+    if (
+      restoreCalendarPosition &&
+      (route.view === "sessions" || route.view === "mySessions") &&
+      selectedSessionId
+    ) {
+      setScrollToSessionId(selectedSessionId);
+    }
 
     if (route.sessionId) {
       setSelectedSessionId(route.sessionId);
@@ -2009,17 +2173,22 @@ React.useEffect(() => {
     }
 
     hasAppliedInitialBrowserRoute.current = true;
-  }, [supabaseMembers, supabaseSessions]);
+  }, [supabaseMembers, supabaseSessions, selectedSessionId]);
 
   React.useEffect(() => {
-    applyBrowserRoute();
+    // Refreshing interests must preserve the current tab and open screen.
+    // Apply URLs only on initial load or actual browser history navigation.
+    if (!hasAppliedInitialBrowserRoute.current) {
+      applyBrowserRoute();
+    }
 
-    const handlePopState = () => applyBrowserRoute();
+    const handlePopState = () => applyBrowserRoute(true);
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [applyBrowserRoute]);
 
   React.useEffect(() => {
+    if (isRestoringLogin) return;
     if (!hasAppliedInitialBrowserRoute.current) return;
     if (isApplyingBrowserHistory.current) {
       isApplyingBrowserHistory.current = false;
@@ -2086,41 +2255,66 @@ React.useEffect(() => {
     profileToView?.nz_bridge_number,
     chatPartner?.nz_bridge_number,
     isCurrentUserDirector,
+    isRestoringLogin,
   ]);
 
+  // Supabase restores both password sessions and OAuth callbacks. Defer RPC
+  // work outside onAuthStateChange to avoid holding the auth client's lock.
   React.useEffect(() => {
-    if (hasRestoredSavedLogin || supabaseMembers.length === 0) return;
-
-    setHasRestoredSavedLogin(true);
-    const savedEmail = localStorage.getItem("bridgebuddy_saved_login_email");
-
-    if (!savedEmail) return;
-
-    setProfileEmail(savedEmail);
-    setRememberLogin(true);
-
-    const savedMember = supabaseMembers.find(
-      (candidate: any) =>
-        candidate.email?.toLowerCase().trim() === savedEmail.toLowerCase().trim()
-    );
-
-    if (savedMember) {
-      setCurrentMember(savedMember);
-      setView(readBrowserRoute().view === "landing" ? "sessions" : readBrowserRoute().view);
-      return;
-    }
-
-    supabase.auth.getSession().then(({ data }) => {
-      const authUser = data.session?.user;
-      if (!authUser?.email || authUser.email.toLowerCase() !== savedEmail.toLowerCase()) {
-        localStorage.removeItem("bridgebuddy_saved_login_email");
-        setRememberLogin(false);
+    let active = true;
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        authLoadVersion.current += 1;
+        setCurrentMember(null);
+        setIsRestoringLogin(false);
+        setView("landing");
         return;
       }
-
-      openAuthenticatedAccount(authUser.email, authUser.id, false);
+      if (event !== "INITIAL_SESSION" && event !== "SIGNED_IN") return;
+      const timer = setTimeout(async () => {
+        timers.delete(timer);
+        if (!active) return;
+        try {
+        if (session?.user) {
+          await openAuthenticatedAccount(false);
+        } else if (event === "INITIAL_SESSION") {
+          const savedEmail = localStorage.getItem("bridgebuddy_saved_login_email");
+          if (!savedEmail) return;
+          const version = ++authLoadVersion.current;
+          const { data, error } = await supabase.rpc("login_existing_test_account", { p_email: savedEmail });
+          if (!active || version !== authLoadVersion.current) return;
+          if (!error && data?.nz_bridge_number) {
+            setCurrentMember(data);
+            setProfileEmail(savedEmail);
+            setRememberLogin(true);
+            setView(readBrowserRoute().view === "landing" ? "sessions" : readBrowserRoute().view);
+          }
+        }
+        } catch {
+          if (active) {
+            setCurrentMember(null);
+            setLandingAuthError("Your login could not be restored. Please log in again.");
+          }
+        } finally {
+          if (active) setIsRestoringLogin(false);
+        }
+      }, 0);
+      timers.add(timer);
     });
-  }, [hasRestoredSavedLogin, supabaseMembers]);
+    const error = new URLSearchParams(window.location.hash.slice(1)).get("error_description")
+      || new URLSearchParams(window.location.search).get("error_description");
+    if (error) {
+      setLandingAuthError(error);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    return () => {
+      active = false;
+      authLoadVersion.current += 1;
+      timers.forEach(clearTimeout);
+      subscription.unsubscribe();
+    };
+  }, []);
 
   function saveLoginPreference(email: string) {
     if (rememberLogin) {
@@ -2131,6 +2325,7 @@ React.useEffect(() => {
   }
 
   async function switchAccount() {
+    authLoadVersion.current += 1;
     const { error } = await supabase.auth.signOut();
 
     if (error) {
@@ -2138,6 +2333,8 @@ React.useEffect(() => {
         "Sign out while switching account error:",
         JSON.stringify(error, null, 2)
       );
+      alert("Could not sign out. Please try Switch Account again.");
+      return;
     }
 
     localStorage.removeItem("bridgebuddy_saved_login_email");
@@ -2152,78 +2349,96 @@ React.useEffect(() => {
     setView("landing");
   }
 
-  function openAuthenticatedAccount(
-    email: string,
-    authUserId: string,
-    savePreference = true
-  ) {
-    const member = supabaseMembers.find(
-      (candidate: any) =>
-        candidate.email?.toLowerCase().trim() === email.toLowerCase().trim()
-    );
-
-    setCurrentMember(
-      member || {
-        member_id: null,
-        nz_bridge_number: null,
-        first_name: email.split("@")[0] || "Player",
-        last_name: "",
-        email,
-        clubs: "",
-        has_user_profile: false,
-        auth_user_id: authUserId,
-        is_guest: true,
+  async function openAuthenticatedAccount(savePreference = true) {
+    const version = ++authLoadVersion.current;
+    setIsLandingAuthSubmitting(true);
+    setLandingAuthMessage("Signing you in…");
+    setLandingAuthError("");
+    try {
+      const { data, error } = await supabase.rpc("ensure_authenticated_player");
+      if (version !== authLoadVersion.current) return;
+      if (error || !data?.nz_bridge_number) {
+        setCurrentMember(null);
+        setLandingAuthError(error?.message || "Your player profile could not be opened. Please try again.");
+        setView("landing");
+        return;
       }
-    );
-    if (savePreference) saveLoginPreference(email);
-    setView(
-      !savePreference && readBrowserRoute().view !== "landing"
-        ? readBrowserRoute().view
-        : "sessions"
-    );
+      setCurrentMember(data);
+      if (savePreference) saveLoginPreference(data.email);
+      const route = readBrowserRoute();
+      setView(!savePreference && route.view !== "landing" && route.view !== "login"
+        ? route.view : "sessions");
+      await refreshSupabaseData();
+    } catch {
+      if (version === authLoadVersion.current) {
+        setLandingAuthError("Could not finish signing in. Please refresh the page and try again.");
+      }
+    } finally {
+      if (version === authLoadVersion.current) {
+        setIsLandingAuthSubmitting(false);
+        setLandingAuthMessage("");
+      }
+    }
+  }
+
+  async function loginWithGoogle() {
+    setLandingAuthError("");
+    setLandingAuthMessage("");
+    setIsLandingAuthSubmitting(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin + "/", queryParams: { prompt: "select_account" } },
+      });
+      if (error) setLandingAuthError(error.message);
+    } catch {
+      setLandingAuthError("Google login could not start. Please try again.");
+    } finally {
+      setIsLandingAuthSubmitting(false);
+    }
   }
 
   async function loginWithMemberEmail() {
     setLandingAuthError("");
     setLandingAuthMessage("");
-
     if (!profileEmail.trim()) {
       setLandingAuthError("Enter your email address.");
       return;
     }
-
-    const member = supabaseMembers.find(
-      (member: any) =>
-        member.email?.toLowerCase().trim() ===
-        profileEmail.toLowerCase().trim()
-    );
-
-    if (!member) {
+    setIsLandingAuthSubmitting(true);
+    try {
       if (!loginPassword) {
-        setLandingAuthError("Enter your password.");
+        const { data, error } = await supabase.rpc("login_existing_test_account", { p_email: profileEmail.trim() });
+        if (error || !data) {
+          setLandingAuthError(error?.message || "Enter your password or continue with Google.");
+          return;
+        }
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+          setLandingAuthError(signOutError.message);
+          return;
+        }
+        authLoadVersion.current += 1;
+        setCurrentMember(data);
+        saveLoginPreference(data.email);
+        setView("sessions");
+        await refreshSupabaseData();
         return;
       }
-
-      setIsLandingAuthSubmitting(true);
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: profileEmail.trim(),
-        password: loginPassword,
+      const { error } = await supabase.auth.signInWithPassword({
+        email: profileEmail.trim(), password: loginPassword,
       });
-      setIsLandingAuthSubmitting(false);
-
-      if (error || !data.user) {
-        setLandingAuthError(error?.message || "Login could not be completed.");
+      if (error) {
+        setLandingAuthError(error.message);
         return;
       }
-
-      openAuthenticatedAccount(data.user.email || profileEmail.trim(), data.user.id);
-      return;
+      saveLoginPreference(profileEmail.trim());
+      // The auth subscription opens the player for both login methods.
+    } catch {
+      setLandingAuthError("Login could not be completed. Please try again.");
+    } finally {
+      setIsLandingAuthSubmitting(false);
     }
-
-    setCurrentMember(member);
-    saveLoginPreference(member.email || profileEmail.trim());
-    console.log("LOGIN MEMBER:", member);
-    setView("sessions");
   }
 
   async function registerBridgeBuddyAccount() {
@@ -2249,6 +2464,7 @@ React.useEffect(() => {
     const { data, error } = await supabase.auth.signUp({
       email: profileEmail.trim(),
       password: loginPassword,
+      options: { emailRedirectTo: window.location.origin + "/" },
     });
     setIsLandingAuthSubmitting(false);
 
@@ -2258,7 +2474,7 @@ React.useEffect(() => {
     }
 
     if (data.session) {
-      openAuthenticatedAccount(data.user.email || profileEmail.trim(), data.user.id);
+      saveLoginPreference(data.user.email || profileEmail.trim());
       return;
     }
 
@@ -2505,14 +2721,14 @@ React.useEffect(() => {
       const registeredByName = otherPlayer
         ? `${otherPlayer.first_name || ""} ${otherPlayer.last_name || ""}`.trim()
         : notificationTournamentRegistration
-        ? `NZ Bridge #${notificationTournamentRegistration.registering_nz_bridge_number}`
+        ? "Player"
         : "";
       const registeredPartnerName = tournamentPartner
         ? `${tournamentPartner.first_name || ""} ${
             tournamentPartner.last_name || ""
           }`.trim()
         : notificationTournamentRegistration
-        ? `NZ Bridge #${notificationTournamentRegistration.partner_nz_bridge_number}`
+        ? "Player"
         : "";
       const registeredPairLabel =
         registeredByName && registeredPartnerName
@@ -2631,6 +2847,10 @@ React.useEffect(() => {
       "Tournaments",
     ]);
     const [isSessionFilterOpen, setIsSessionFilterOpen] = useState(false);
+    const [sessionClubFilter, setSessionClubFilter] = useState("");
+    const [sessionDateFilter, setSessionDateFilter] = useState("");
+    const [isSessionClubFilterOpen, setIsSessionClubFilterOpen] = useState(false);
+    const sessionClubFilterRef = React.useRef<HTMLDetailsElement | null>(null);
     const [sessionDayFilters, setSessionDayFilters] = useState<string[]>([
       "Monday",
       "Tuesday",
@@ -2722,6 +2942,13 @@ React.useEffect(() => {
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      if (
+        sessionClubFilterRef.current &&
+        !sessionClubFilterRef.current.contains(event.target as Node)
+      ) {
+        setIsSessionClubFilterOpen(false);
+      }
+
       if (
         matchFilterRef.current &&
         !matchFilterRef.current.contains(event.target as Node)
@@ -2832,8 +3059,51 @@ React.useEffect(() => {
   const [standbyNote, setStandbyNote] = useState("");
   const [currentStandbyRecord, setCurrentStandbyRecord] = useState<any>(null);
   const [myStandbySessions, setMyStandbySessions] = useState<any[]>([]);
+  const [cancellingStandbySessionId, setCancellingStandbySessionId] = useState<string | null>(null);
+  const [standbyCancellationError, setStandbyCancellationError] = useState("");
   const [directorStandbyList, setDirectorStandbyList] = useState<any[]>([]);
   const [directorStandbyCounts, setDirectorStandbyCounts] = useState<any[]>([]);
+
+  function openCalendarSession(session: any) {
+    if (!session) return;
+    const day = new Date(session.session_date + "T00:00:00")
+      .toLocaleDateString("en-NZ", { weekday: "long" });
+    setSessionLocationFilters(filters => filters.includes(session.location_type)
+      ? filters : [...filters, session.location_type]);
+    setSessionDayFilters(filters => filters.includes(day) ? filters : [...filters, day]);
+    setSessionTypeFilters([]);
+    setSessionNameFilters([]);
+    setCalendarLinkedSessionId(String(session.session_instance_id));
+    setScrollToSessionId(String(session.session_instance_id));
+    setView("sessions");
+  }
+
+  async function cancelListedStandby(standbySession: any) {
+    if (!currentMember?.nz_bridge_number || cancellingStandbySessionId) return;
+    const sessionId = String(standbySession.session_instance_id);
+    setCancellingStandbySessionId(sessionId);
+    setStandbyCancellationError("");
+    try {
+      const standbyIds = [...new Set(myStandbySessions
+        .filter(record => String(record.session_instance_id) === sessionId &&
+          String(record.standby_status).trim() === "Available")
+        .map(record => Number(record.standby_id)))];
+      for (const standbyId of standbyIds) {
+        const { data, error } = await supabase.rpc("cancel_player_standby", {
+          p_standby_id: standbyId,
+          p_session_instance_id: sessionId,
+          p_nz_bridge_number: Number(currentMember.nz_bridge_number),
+        });
+        if (error || data !== true) throw new Error(error?.message || "Standby could not be cancelled.");
+        setMyStandbySessions(records => records.filter(record => Number(record.standby_id) !== standbyId));
+      }
+    } catch (error) {
+      setStandbyCancellationError(error instanceof Error ? error.message : "Standby could not be cancelled.");
+    } finally {
+      await refreshSupabaseData();
+      setCancellingStandbySessionId(null);
+    }
+  }
 
   function standbyPreferencesStorageKey() {
     const memberKey =
@@ -3115,12 +3385,37 @@ React.useEffect(() => {
     loadCurrentStandbyRecord();
   }, [view, selectedSessionId, currentMember]);
 
+  const sessionClubOptions = Array.from(
+    new Set(supabaseSessions.map((session) => String(session.club_id ?? "")))
+  )
+    .filter(Boolean)
+    .map((id) => {
+      const session = supabaseSessions.find((item) =>
+        String(item.club_id ?? "") === id && (item.club_name || item.clubs)
+      );
+      const member = supabaseMembers.find((item) =>
+        String(item.club_id ?? "") === id && (item.club_name || item.clubs)
+      );
+      return {
+        id,
+        name: String(session?.club_name || session?.clubs || member?.club_name || member?.clubs || `Club ${id}`).trim(),
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   const filteredSessions = supabaseSessions
+    .filter((session: any) =>
+      sessionClubFilter === "" || String(session.club_id ?? "") === sessionClubFilter
+    )
     .filter((session: any) => {
+        if (sessionDateFilter) {
+          return session.session_date === sessionDateFilter;
+        }
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        return new Date(session.session_date + "T00:00:00") >= today;
+        return String(session.session_instance_id) === calendarLinkedSessionId ||
+          new Date(session.session_date + "T00:00:00") >= today;
       })
     .filter((session: any) =>
       sessionLocationFilters.includes(session.location_type)
@@ -3345,7 +3640,7 @@ React.useEffect(() => {
 
     const directoryClubOptions = [
       ...new Set(
-        csvMembers
+        directoryMembers
           .filter(
             (player: any) =>
               String(player.profile_completed || "").toLowerCase() === "yes"
@@ -3355,7 +3650,7 @@ React.useEffect(() => {
               player.nz_bridge_number || player.member_id
             );
             const visibleProfile =
-              visibleMemberProfiles[String(playerNumber)];
+              staffProfiles[String(playerNumber)] || visibleMemberProfiles[String(playerNumber)];
 
             return visibleProfile?.club_visible === true
               ? String(visibleProfile.clubs || "").trim()
@@ -3371,7 +3666,7 @@ React.useEffect(() => {
         directoryClubSearch
     );
 
-    const filteredDirectoryPlayers = csvMembers
+    const filteredDirectoryPlayers = directoryMembers
       .filter(
         (player: any) =>
           String(player.profile_completed || "").toLowerCase() === "yes"
@@ -3381,7 +3676,7 @@ React.useEffect(() => {
           player.nz_bridge_number || player.member_id
         );
         const visibleProfile =
-          visibleMemberProfiles[String(playerNumber)];
+          staffProfiles[String(playerNumber)] || visibleMemberProfiles[String(playerNumber)];
         const visibleFirstName = String(
           visibleProfile?.first_name || player.first_name || ""
         ).toLowerCase();
@@ -3418,7 +3713,7 @@ React.useEffect(() => {
           const playerNumber = Number(
             player.nz_bridge_number || player.member_id
           );
-          const visibleProfile = visibleMemberProfiles[String(playerNumber)];
+          const visibleProfile = staffProfiles[String(playerNumber)] || visibleMemberProfiles[String(playerNumber)];
 
           return {
             firstName: String(
@@ -3569,6 +3864,14 @@ React.useEffect(() => {
     setWantedSystems([]);
   }
 
+  if (isRestoringLogin) {
+    return (
+      <main style={styles.container}>
+        <Card><p role="status" style={styles.text}>Restoring your login...</p></Card>
+      </main>
+    );
+  }
+
   if (view === "completeProfile" && selectedProfileMember) {
   return (
     <main style={styles.container}>
@@ -3708,7 +4011,9 @@ React.useEffect(() => {
     return (
       <main style={styles.page}>
         <div style={styles.container}>
+          <div style={styles.stickyHeader}>
           <Nav
+            roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -3726,6 +4031,7 @@ React.useEffect(() => {
               matchCount={filteredMatches.length}
             />
           )}
+          </div>
 
           <Card>
             <div
@@ -3951,11 +4257,18 @@ React.useEffect(() => {
                 </div>
               )}
 
+              {isCurrentUserStaff ? <StaffProfileFields
+                profile={isAccountEditing ? staffDraft : accountStaffProfile}
+                club={currentMember?.clubs || currentMember?.club_name || ""}
+                phone={isAccountEditing ? accountDraftContactPhone : accountProfile.contactPhone}
+                editing={isAccountEditing} onChange={setStaffDraft}
+                onPhoneChange={setAccountDraftContactPhone} styles={styles}
+              /> : <>
               <div style={styles.accountReadOnlyField}>
                 <div style={styles.accountDetailMain}>
                   <div style={styles.accountLabel}>NZ Bridge number</div>
                   <div style={styles.accountValue}>
-                    {currentMember?.nz_bridge_number || "Not listed"}
+                    {currentMember?.actual_nz_bridge_number || "Not listed"}
                   </div>
                 </div>
                 <ProfileVisibilitySetting
@@ -4258,6 +4571,7 @@ React.useEffect(() => {
                   )}
                 </div>
               </div>
+              </>}
             </div>
 
             {isAccountEditing && (
@@ -4277,7 +4591,19 @@ React.useEffect(() => {
 
                     setIsAccountProfileSaving(true);
 
-                    const { data, error } = await supabase.rpc(
+                    if (isCurrentUserStaff && !staffDraft.role_title.trim()) {
+                      alert("Enter your role/title.");
+                      setIsAccountProfileSaving(false);
+                      return;
+                    }
+                    const { data, error } = isCurrentUserStaff
+                      ? await supabase.rpc("update_staff_profile", {
+                          p_nz_bridge_number: Number(currentMember.nz_bridge_number),
+                          p_staff_profile: staffDraft,
+                          p_contact_phone: accountDraftContactPhone,
+                          p_avatar_key: accountDraftAvatarKey,
+                        })
+                      : await supabase.rpc(
                       "update_editable_member_profile",
                       {
                         p_nz_bridge_number: Number(
@@ -4418,7 +4744,7 @@ React.useEffect(() => {
                     const {
                       data: savedChatAvailabilityData,
                       error: chatAvailabilitySaveError,
-                    } = await supabase.rpc("update_chat_availability", {
+                    } = isCurrentUserStaff ? { data: accountProfile.chatAvailability, error: null } : await supabase.rpc("update_chat_availability", {
                       p_nz_bridge_number: Number(
                         currentMember.nz_bridge_number
                       ),
@@ -4451,7 +4777,7 @@ React.useEffect(() => {
                     const {
                       data: savedVisibilityData,
                       error: visibilitySaveError,
-                    } = await supabase.rpc("update_profile_visibility", {
+                    } = isCurrentUserStaff ? { data: accountProfileVisibility, error: null } : await supabase.rpc("update_profile_visibility", {
                       p_nz_bridge_number: Number(
                         currentMember.nz_bridge_number
                       ),
@@ -4550,6 +4876,14 @@ React.useEffect(() => {
                 </button>
               </div>
             )}
+            {!isCurrentUserStaff && (
+              <p style={{ ...styles.smallText, marginTop: "24px" }}>
+                🔒 <strong>Privacy:</strong> Your visibility settings control what
+                other players can see. Authorised club directors may access your
+                bridge level and contact details when needed to manually manage
+                sessions, partnerships or tournament registrations.
+              </p>
+            )}
           </Card>
 
         </div>
@@ -4620,7 +4954,7 @@ React.useEffect(() => {
         <h1 style={styles.sectionTitle}>Create Profile</h1>
 
         <p style={styles.text}>
-          Find your club membership first, then complete your profile.
+          Register with your email or Google on the login page, then complete your profile. Club membership is optional.
         </p>
 
             <input
@@ -4717,19 +5051,14 @@ React.useEffect(() => {
 
   if (view === "sessions" || view === "mySessions") {
     return (
-      <main style={styles.page}>
+      <main className="calendar-page" style={styles.page}>
         <div style={styles.container}>
           <div
-            style={{
-              position: "sticky",
-              top: 0,
-              zIndex: 20,
-              background: "#f8fafc",
-              paddingTop: "8px",
-              paddingBottom: "8px",
-            }}
+            className="calendar-navigation"
+            style={styles.stickyHeader}
           >
           <Nav
+            roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -4748,22 +5077,14 @@ React.useEffect(() => {
             />
           )}
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          marginBottom: "16px",
-        }}
-      >
+          </div>
+
+      <div className="calendar-filters">
 
         <details
-          ref={sessionFilterRef}
-          open={isSessionFilterOpen}
-          onToggle={(e) => setIsSessionFilterOpen(e.currentTarget.open)}
-          style={{
-            width: "180px",
-            marginRight: "12px",
-          }}
+          ref={sessionClubFilterRef}
+          open={isSessionClubFilterOpen}
+          onToggle={(e) => setIsSessionClubFilterOpen(e.currentTarget.open)}
         >
           <summary
             style={{
@@ -4777,7 +5098,55 @@ React.useEffect(() => {
               fontWeight: 600,
             }}
           >
-            Filter calendar
+            Club
+          </summary>
+          <div
+            role="radiogroup"
+            aria-label="Club"
+            style={{
+              padding: "10px 12px",
+              border: "1px solid #cbd5e1",
+              borderTop: "none",
+              borderRadius: "0 0 10px 10px",
+              background: "white",
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+            }}
+          >
+            {[{ id: "", name: "All" }, ...sessionClubOptions].map((club) => (
+              <label key={club.id} style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="radio"
+                  name="calendar-club"
+                  value={club.id}
+                  checked={sessionClubFilter === club.id}
+                  onChange={() => setSessionClubFilter(club.id)}
+                />
+                {club.name}
+              </label>
+            ))}
+          </div>
+        </details>
+
+        <details
+          ref={sessionFilterRef}
+          open={isSessionFilterOpen}
+          onToggle={(e) => setIsSessionFilterOpen(e.currentTarget.open)}
+        >
+          <summary
+            style={{
+              cursor: "pointer",
+              padding: "6px 10px",
+              border: "1px solid #cbd5e1",
+              borderRadius: "10px",
+              background: "#f8fafc",
+              color: "#475569",
+              fontSize: "14px",
+              fontWeight: 600,
+            }}
+          >
+            Session type
           </summary>
 
           <div
@@ -4822,9 +5191,6 @@ React.useEffect(() => {
           ref={sessionDayFilterRef}
           open={isSessionDayFilterOpen}
           onToggle={(e) => setIsSessionDayFilterOpen(e.currentTarget.open)}
-          style={{
-            width: "180px",
-          }}
         >
           <summary
             style={{
@@ -4838,7 +5204,7 @@ React.useEffect(() => {
               fontWeight: 600,
             }}
           >
-            Filter days
+            Day
           </summary>
 
           <div
@@ -4882,16 +5248,62 @@ React.useEffect(() => {
           </div>
         </details>
 
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "8px",
-            fontSize: "12px",
-            color: "#475569",
-            marginLeft: "auto",
-          }}
-        >
+        <div className="calendar-date-filter">
+          <div className="calendar-date-control">
+            <span className="calendar-date-prompt" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="16" rx="2" />
+                <path d="M16 3v4M8 3v4M3 11h18" />
+              </svg>
+              {sessionDateFilter
+                ? new Date(`${sessionDateFilter}T12:00:00`).toLocaleDateString("en-NZ", {
+                    day: "numeric",
+                    month: "short",
+                  })
+                : "Choose date"}
+            </span>
+          <input
+            id="calendar-date"
+            aria-label={sessionDateFilter ? "Change selected date" : "Choose date — no date selected"}
+            type="date"
+            value={sessionDateFilter}
+            onChange={(e) => setSessionDateFilter(e.target.value)}
+            style={{
+              padding: "6px 10px",
+              border: "1px solid #cbd5e1",
+              borderRadius: "10px",
+              background: "#f8fafc",
+              color: "#475569",
+              fontFamily: "inherit",
+              fontSize: "14px",
+            }}
+          />
+          </div>
+          {sessionDateFilter && (
+            <button
+              type="button"
+              aria-label="Clear date"
+              title="Clear date"
+              onClick={() => setSessionDateFilter("")}
+              style={{
+                padding: "6px 10px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "10px",
+                background: "white",
+                color: "#475569",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
+            >
+              <span className="calendar-clear-label">Clear date</span>
+              <span className="calendar-clear-icon" aria-hidden="true">×</span>
+            </button>
+          )}
+        </div>
+
+      </div>
+
+        <div className="calendar-level-key" aria-label="Player levels">
           <span>🟨 Learner</span>
           <span>🟩 Beginner</span>
           <span>🟩 Improver</span>
@@ -4900,12 +5312,14 @@ React.useEffect(() => {
           <span>🟧 Expert</span>
           <span>🟥 Open</span>
         </div>
-      </div>
-</div>
 
-          {view === "mySessions" && mySessionItems.length === 0 && (
+          {(view === "mySessions" ? mySessionItems : filteredSessions).length === 0 && (
             <Card>
-              <p style={styles.text}>You are not involved in any upcoming sessions yet.</p>
+              <p style={styles.text}>
+                {view === "mySessions"
+                  ? "None of your sessions match the selected filters."
+                  : "No sessions match the selected filters."}
+              </p>
             </Card>
           )}
 
@@ -5018,7 +5432,7 @@ React.useEffect(() => {
                   : currentMemberLookingForSession
                     ? "You are looking"
                     : currentMemberInterestedForSession
-                      ? "You have expressed interest"
+                      ? "Interest pending"
                       : currentMemberStandbyForSession
                         ? "You are standby"
                         : null;
@@ -5077,6 +5491,7 @@ React.useEffect(() => {
                 }}
               >
               <div
+                className="calendar-session-content"
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
@@ -5086,7 +5501,7 @@ React.useEffect(() => {
               >
             <div>
 
-                <div style={{ fontSize: "16px" }}>
+                <div className="calendar-session-heading" style={{ fontSize: "16px" }}>
                   <button
                     type="button"
                     onClick={(event) => {
@@ -5140,17 +5555,13 @@ React.useEffect(() => {
                     {session.location_type === "Tournaments" ? (
                       <span
                         style={{
-                          display: "inline-block",
-                          background: "#dc2626",
-                          color: "white",
-                          borderRadius: "999px",
-                          padding: "2px 7px",
-                          fontSize: "12px",
-                          fontWeight: 700,
+                          color: "#dc2626",
+                          fontSize: "13px",
+                          fontWeight: 400,
                           marginLeft: "6px",
                         }}
                       >
-                        Tournament
+                        (Tournament)
                       </span>
                     ) : (
                       <span
@@ -5227,20 +5638,6 @@ React.useEffect(() => {
                             </span>
                           </>
                         );
-                      }
-
-                      if (
-                        view === "mySessions" &&
-                        currentMemberLookingForSession
-                      ) {
-                        return <>You are looking</>;
-                      }
-
-                      if (
-                        view === "mySessions" &&
-                        currentMemberInterestedForSession
-                      ) {
-                        return <>You have expressed interest</>;
                       }
 
                       const matchedPlayerNumbersForThisSession = supabaseMatches
@@ -5559,118 +5956,7 @@ React.useEffect(() => {
           <div style={{ height: "40px" }} />
         </div>
 
-        {profileToView && (
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(15, 23, 42, 0.45)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 1000,
-              padding: "24px",
-            }}
-          >
-            <div
-              style={{
-                background: "white",
-                borderRadius: "20px",
-                padding: "32px",
-                width: "100%",
-                maxWidth: "460px",
-                boxShadow: "0 24px 80px rgba(15, 23, 42, 0.25)",
-              }}
-            >
-              <h2 style={styles.sectionTitle}>
-                {profileToView.first_name} {profileToView.last_name}
-              </h2>
-
-              <div style={styles.text}>
-                Level:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.level || profileToView.level_name,
-                  profileToView.level_visible,
-                  "Not completed"
-                )}
-              </div>
-
-              <div style={styles.text}>
-                Systems:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.systems,
-                  profileToView.systems_visible,
-                  "Not completed"
-                )}
-              </div>
-
-              <div style={styles.text}>
-                Club:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.clubs,
-                  profileToView.club_visible,
-                  "Not listed"
-                )}
-              </div>
-
-              <div
-                style={{
-                  marginTop: "24px",
-                  display: "flex",
-                  gap: "10px",
-                  flexWrap: "wrap",
-                }}
-              >
-                {String(profileToView.nz_bridge_number) !== String(currentMember?.nz_bridge_number) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setChatPartner(profileToView);
-                      setChatReturnView(view);
-                      setProfileToView(null);
-                      setView("chat");
-                    }}
-                    style={{
-                      background: "#2b8792",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "999px",
-                      padding: "8px 16px",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Chat
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setProfileToView(null)}
-                  style={{
-                    background: "#e0f2f4",
-                    color: "#064e5f",
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {renderPlayerProfileModal()}
       </main>
     );
   }
@@ -5703,7 +5989,7 @@ React.useEffect(() => {
                 .toLowerCase();
               const memberSearchValue = `${member.first_name || ""} ${
                 member.last_name || ""
-              } ${member.nz_bridge_number || ""}`.toLowerCase();
+              } ${member.actual_nz_bridge_number || ""}`.toLowerCase();
 
               return (
                 String(member.nz_bridge_number) !==
@@ -5730,7 +6016,7 @@ React.useEffect(() => {
               const searchValue = tournamentPartnerSearch.trim().toLowerCase();
               const memberSearchValue = `${member.first_name || ""} ${
                 member.last_name || ""
-              } ${member.nz_bridge_number || ""}`.toLowerCase();
+              } ${member.actual_nz_bridge_number || ""}`.toLowerCase();
 
               return (
                 String(member.nz_bridge_number) !==
@@ -5803,7 +6089,7 @@ React.useEffect(() => {
           ? `${registeringMember.first_name || ""} ${
               registeringMember.last_name || ""
             }`.trim()
-          : `NZ Bridge #${registration.registering_nz_bridge_number}`;
+          : "Player";
         const partnerName = partnerMember
           ? `${partnerMember.first_name || ""} ${
               partnerMember.last_name || ""
@@ -5819,7 +6105,7 @@ React.useEffect(() => {
           registeringName,
           partnerName:
             partnerName ||
-            `NZ Bridge #${registration.partner_nz_bridge_number || "Unknown"}`,
+            "Player",
         };
       });
 
@@ -6002,11 +6288,11 @@ React.useEffect(() => {
     ).trim();
 
     const directorAvailableTournamentStandbyPartners = directorMatchRequest
-      ? directorSelectedTournamentClubId === directorTournamentClubId
-        ? directorStandbyList
+      ? directorStandbyList
             .filter(
-              (standbyPlayer: any) =>
-                String(standbyPlayer.nz_bridge_number) !==
+              (standbyPlayer: any, index: number, players: any[]) =>
+                index === players.findIndex((candidate: any) => String(candidate.nz_bridge_number) === String(standbyPlayer.nz_bridge_number)) &&
+              String(standbyPlayer.nz_bridge_number) !==
                   String(directorMatchRequest.nz_bridge_number) &&
                 String(standbyPlayer.nz_bridge_number) !==
                   String(currentMember?.nz_bridge_number) &&
@@ -6032,7 +6318,6 @@ React.useEffect(() => {
                 }`
               )
             )
-        : []
       : [];
 
     const directorAvailableTournamentStandbyNumbers =
@@ -6040,13 +6325,17 @@ React.useEffect(() => {
         String(standbyPlayer.nz_bridge_number)
       );
 
+    const directorLookingPartnerNumbers = new Set<string>(
+      supabaseRequestRecords.filter((request: any) =>
+        String(request.session_instance_id) === String(selectedSessionId) &&
+        String(request.request_status).trim() === "Open"
+      ).map((request: any) => String(request.nz_bridge_number))
+    );
     const directorAvailableTournamentMemberPartners =
       directorMatchRequest
         ? supabaseMembers
             .filter(
               (member: any, index: number, members: any[]) =>
-                String(member.club_id) ===
-                  directorSelectedTournamentClubId &&
                 member.is_active !== false &&
                 String(member.nz_bridge_number) !==
                   String(directorMatchRequest.nz_bridge_number) &&
@@ -6075,13 +6364,7 @@ React.useEffect(() => {
                   )
             )
             .sort((firstMember: any, secondMember: any) =>
-              `${firstMember.first_name || ""} ${
-                firstMember.last_name || ""
-              }`.localeCompare(
-                `${secondMember.first_name || ""} ${
-                  secondMember.last_name || ""
-                }`
-              )
+              compareDirectorPartners(firstMember, secondMember, directorLookingPartnerNumbers, directorSelectedTournamentClubId)
             )
         : [];
 
@@ -6121,14 +6404,14 @@ React.useEffect(() => {
           member: requester,
           name: requester
             ? `${requester.first_name || ""} ${requester.last_name || ""}`.trim()
-            : `NZ Bridge #${match.requester_nz_bridge_number}`,
+            : "Player",
           nzBridgeNumber: match.requester_nz_bridge_number,
         },
         {
           member: partner,
           name: partner
             ? `${partner.first_name || ""} ${partner.last_name || ""}`.trim()
-            : `NZ Bridge #${match.partner_nz_bridge_number}`,
+            : "Player",
           nzBridgeNumber: match.partner_nz_bridge_number,
         },
       ];
@@ -6173,7 +6456,7 @@ React.useEffect(() => {
                     cancelledByMember.last_name || ""
                   }`.trim()
                 : match.cancelled_by_nz_bridge_number
-                  ? `NZ Bridge #${match.cancelled_by_nz_bridge_number}`
+                  ? "Player"
                   : "Not recorded";
 
               return (
@@ -6318,7 +6601,7 @@ React.useEffect(() => {
                   standby.member.last_name || ""
                 }`.trim()
               : `${standby.first_name || ""} ${standby.last_name || ""}`.trim() ||
-                `NZ Bridge #${standby.nz_bridge_number}`;
+                "Player";
             const playingLevels = Array.isArray(standby.playing_level_ids)
               ? standby.playing_level_ids
                   .map(
@@ -6361,7 +6644,7 @@ React.useEffect(() => {
                 <div>
                   <div style={{ fontSize: "16px" }}>
                     {renderTournamentRegistrationPlayerName(
-                      standby.member,
+                      standby.member || standby,
                       playerName,
                       standby.nz_bridge_number
                     )}
@@ -6957,7 +7240,7 @@ React.useEffect(() => {
                             cancelledByMember.last_name || ""
                           }`.trim()
                         : registration.cancelled_by_nz_bridge_number
-                          ? `NZ Bridge #${registration.cancelled_by_nz_bridge_number}`
+                          ? "Player"
                           : "Not recorded";
 
                       return (
@@ -7132,7 +7415,9 @@ React.useEffect(() => {
     return (
       <main style={styles.page}>
         <div style={styles.container}>
+          <div style={styles.stickyHeader}>
           <Nav
+            roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             view={view}
             setView={navigateFromSessionDetail}
             notifications={notifications}
@@ -7170,6 +7455,7 @@ React.useEffect(() => {
                   {filterName}
                 </button>
               ))}
+          </div>
           </div>
 
           <Card>
@@ -7305,7 +7591,7 @@ React.useEffect(() => {
                             }`.trim(),
                             currentMemberTournamentMatchPartnerNumber
                           )
-                        : `NZ Bridge #${currentMemberTournamentMatchPartnerNumber}`}{" "}
+                        : "Player"}{" "}
                       for this tournament.
                     </MyStatusSummary>
                   </>
@@ -7429,20 +7715,23 @@ React.useEffect(() => {
                 <div
                   style={{
                     display: "flex",
-                    justifyContent:
-                      isCurrentUserDirector || currentMemberTournamentRegistration
-                      ? "space-between"
-                      : "flex-end",
+                    justifyContent: "space-between",
                     alignItems: "center",
                     gap: "12px",
                     flexWrap: "wrap",
                     marginBottom: "18px",
                   }}
                 >
-                  {isCurrentUserDirector && (
+                  {(isCurrentUserDirector ||
+                    (!currentMemberTournamentRegistration &&
+                      !currentStandbyRecord)) && (
                     <button
                       type="button"
-                      onClick={openTournamentRegistrationModal}
+                      onClick={
+                        !isCurrentUserDirector && currentMemberTournamentMatch
+                          ? registerCurrentTournamentMatch
+                          : openTournamentRegistrationModal
+                      }
                       style={{
                         ...styles.matchButton,
                         background: "#267c89",
@@ -7503,6 +7792,25 @@ React.useEffect(() => {
 
             {displayedTournamentDetailFilter === "Looking" && (
               <>
+                {!isCurrentUserDirector &&
+                  !currentMemberTournamentRegistration &&
+                  !currentMemberTournamentMatch &&
+                  !currentMemberTournamentLookingRequest &&
+                  !currentStandbyRecord && (
+                    <div style={{ marginBottom: "18px" }}>
+                      <button
+                        type="button"
+                        onClick={openNewLookingRequestModal}
+                        style={{
+                          ...styles.matchButton,
+                          background: "#267c89",
+                          color: "white",
+                        }}
+                      >
+                        Add me to looking list
+                      </button>
+                    </div>
+                  )}
 
                 {tournamentLookingRequests.length === 0 ? (
                   <p style={styles.text}>
@@ -7521,7 +7829,7 @@ React.useEffect(() => {
                         ? `${request.member.first_name || ""} ${
                             request.member.last_name || ""
                           }`.trim()
-                        : `NZ Bridge #${request.nz_bridge_number}`;
+                        : "Player";
                       const isOwnRequest =
                         String(request.nz_bridge_number) ===
                         String(currentMember?.nz_bridge_number);
@@ -7612,7 +7920,7 @@ React.useEffect(() => {
                                           ? `${interest.member.first_name || ""} ${
                                               interest.member.last_name || ""
                                             }`.trim()
-                                          : `NZ Bridge #${interest.interested_nz_bridge_number}`;
+                                          : "Player";
 
                                         return (
                                           <div
@@ -7625,41 +7933,7 @@ React.useEffect(() => {
                                               interest.interested_nz_bridge_number
                                             )}
 
-                                            <div
-                                              key={interest.interest_id}
-                                              style={styles.interestedPlayerCard}
-                                            >
-                                              {renderTournamentRegistrationPlayerName(
-                                                interest.member,
-                                                interestedName,
-                                                interest.interested_nz_bridge_number
-                                              )}
-
-                                              <div style={styles.buttonRow}>
-                                                <button
-                                                  type="button"
-                                                  style={styles.compactPrimaryAction}
-                                                  onClick={() =>
-                                                    setTournamentInterestToAccept(interest)
-                                                  }
-                                                >
-                                                  Accept
-                                                </button>
-
-                                                <button
-                                                  type="button"
-                                                  style={styles.compactPrimaryAction}
-                                                  onClick={() => {
-                                                    setTournamentInterestToDecline(interest);
-                                                    setTournamentDeclineReason("");
-                                                  }}
-                                                >
-                                                  Decline
-                                                </button>
-                                              </div>
-                                            </div>
-
-                                            <div style={styles.buttonRow}>
+                                            <div style={styles.interestedPlayerActions}>
                                               <button
                                                 type="button"
                                                 style={styles.compactPrimaryAction}
@@ -7888,7 +8162,7 @@ React.useEffect(() => {
           </Card>
 
           {showRequestTypeModal && (
-            <div
+            <ModalBackdrop onDismiss={() => setShowRequestTypeModal(false)}
               style={{
                 position: "fixed",
                 top: 0,
@@ -8088,11 +8362,11 @@ React.useEffect(() => {
                   </button>
                 </div>
               </div>
-            </div>
+            </ModalBackdrop>
           )}
 
           {requestToRemove && (
-            <div
+            <ModalBackdrop onDismiss={() => setRequestToRemove(null)}
               style={{
                 position: "fixed",
                 top: 0,
@@ -8167,11 +8441,11 @@ React.useEffect(() => {
                   </button>
                 </div>
               </div>
-            </div>
+            </ModalBackdrop>
           )}
 
           {tournamentInterestToAccept && (
-            <div
+            <ModalBackdrop onDismiss={() => setTournamentInterestToAccept(null)} dismissDisabled={isTournamentInterestResponding}
               style={{
                 position: "fixed",
                 inset: 0,
@@ -8210,7 +8484,7 @@ React.useEffect(() => {
                       ? `${tournamentInterestToAccept.member.first_name || ""} ${
                           tournamentInterestToAccept.member.last_name || ""
                         }`.trim()
-                      : `NZ Bridge #${tournamentInterestToAccept.interested_nz_bridge_number}`}
+                      : "Player"}
                   </strong>{" "}
                   or register the pair immediately.
                 </p>
@@ -8273,11 +8547,14 @@ React.useEffect(() => {
                   </button>
                 </div>
               </div>
-            </div>
+            </ModalBackdrop>
           )}
 
           {tournamentInterestToDecline && (
-            <div
+            <ModalBackdrop onDismiss={() => {
+                      setTournamentInterestToDecline(null);
+                      setTournamentDeclineReason("");
+                    }} dismissDisabled={isTournamentInterestResponding}
               style={{
                 position: "fixed",
                 inset: 0,
@@ -8382,11 +8659,11 @@ React.useEffect(() => {
                   </button>
                 </div>
               </div>
-            </div>
+            </ModalBackdrop>
           )}
 
           {showStandbyModal && (
-            <div
+            <ModalBackdrop onDismiss={() => setShowStandbyModal(false)}
               style={{
                 position: "fixed",
                 top: 0,
@@ -8636,11 +8913,16 @@ React.useEffect(() => {
                   </button>
                 </div>
               </div>
-            </div>
+            </ModalBackdrop>
           )}
 
           {directorMatchRequest && isCurrentUserDirector && (
-            <div
+            <ModalBackdrop onDismiss={() => {
+                      setDirectorMatchRequest(null);
+                      setDirectorMatchPartnerNumber("");
+                      setDirectorMatchStandbyId(null);
+                      setDirectorMatchNote("");
+                    }}
               style={{
                 position: "fixed",
                 inset: 0,
@@ -8853,7 +9135,7 @@ React.useEffect(() => {
                             >
                               <span style={{ fontWeight: 700 }}>
                                 {standbyPlayer.first_name || "Unknown"}{" "}
-                                {standbyPlayer.last_name || "player"}
+                                {standbyPlayer.last_name || "player"}, {directorPartnerLevel(standbyPlayer, supabaseMembers, visibleMemberProfiles)}
                               </span>
 
                               <span
@@ -8906,11 +9188,13 @@ React.useEffect(() => {
                           >
                             <span style={{ fontWeight: 700 }}>
                               {member.first_name || "Unknown"}{" "}
-                              {member.last_name || "player"}
+                              {member.last_name || "player"}, {directorPartnerLevel(member, supabaseMembers, visibleMemberProfiles)}
                             </span>
 
                             <span style={{ color: "#64748b", fontSize: "12px" }}>
-                              NZ Bridge #{member.nz_bridge_number}
+                              {directorLookingPartnerNumbers.has(String(member.nz_bridge_number))
+                                ? "Looking"
+                                : directorPartnerClub(member)}
                             </span>
                           </button>
                         );
@@ -9031,7 +9315,6 @@ React.useEffect(() => {
 
                   <button
                     type="button"
-                    disabled={!directorMatchPartnerNumber}
                     onClick={() => {
                       setDirectorMatchRequest(null);
                       setDirectorMatchPartnerNumber("");
@@ -9040,24 +9323,23 @@ React.useEffect(() => {
                     }}
                     style={{
                       ...styles.matchButton,
-                      background: directorMatchPartnerNumber
-                        ? "#267c89"
-                        : "#dbe4e7",
-                      color: directorMatchPartnerNumber ? "white" : "#829399",
-                      cursor: directorMatchPartnerNumber
-                        ? "pointer"
-                        : "not-allowed",
+                      background: "#267c89",
+                      color: "white",
+                      cursor: "pointer",
                     }}
                   >
                     Cancel
                   </button>
                 </div>
               </div>
-            </div>
+            </ModalBackdrop>
           )}
 
           {showTournamentRegistrationModal && (
-            <div
+            <ModalBackdrop onDismiss={() => {
+                      setShowTournamentRegistrationModal(false);
+                      resetTournamentRegistrationForm();
+                    }}
               style={{
                 position: "fixed",
                 top: 0,
@@ -9191,7 +9473,7 @@ React.useEffect(() => {
                                   {member.first_name} {member.last_name}
                                 </span>
                                 <span style={styles.smallText}>
-                                  NZ Bridge number: {member.nz_bridge_number}
+                                  NZ Bridge number: {member.actual_nz_bridge_number || "Not listed"}
                                 </span>
                               </button>
                             );
@@ -9353,7 +9635,7 @@ React.useEffect(() => {
                                 {member.first_name} {member.last_name}
                               </span>
                               <span style={styles.smallText}>
-                                NZ Bridge number: {member.nz_bridge_number}
+                                NZ Bridge number: {member.actual_nz_bridge_number || "Not listed"}
                               </span>
                             </button>
                           );
@@ -9628,7 +9910,7 @@ React.useEffect(() => {
                   </Button>
                 </div>
               </div>
-            </div>
+            </ModalBackdrop>
           )}
 
           {renderPlayerProfileModal()}
@@ -9833,10 +10115,11 @@ React.useEffect(() => {
         "Session club"
     ).trim();
     const directorAvailableStandbyPartners = directorMatchRequest
-      ? directorSelectedClubId === directorSessionClubId
-        ? directorStandbyList
+      ? directorStandbyList
           .filter(
-            (standbyPlayer: any) =>
+            (standbyPlayer: any, index: number, players: any[]) =>
+              !activeMatchedPlayerNumbersForSelectedSession.includes(String(standbyPlayer.nz_bridge_number)) &&
+              index === players.findIndex((candidate: any) => String(candidate.nz_bridge_number) === String(standbyPlayer.nz_bridge_number)) &&
               String(standbyPlayer.nz_bridge_number) !==
                 String(directorMatchRequest.nz_bridge_number) &&
               String(standbyPlayer.nz_bridge_number) !==
@@ -9857,18 +10140,23 @@ React.useEffect(() => {
               }`
             )
           )
-        : []
       : [];
     const directorAvailableStandbyNumbers = directorStandbyList.map(
       (standbyPlayer: any) => String(standbyPlayer.nz_bridge_number)
+    );
+    const directorLookingPartnerNumbers = new Set<string>(
+      supabaseRequestRecords.filter((request: any) =>
+        String(request.session_instance_id) === String(selectedSessionId) &&
+        String(request.request_status).trim() === "Open"
+      ).map((request: any) => String(request.nz_bridge_number))
     );
     const directorAvailableMemberPartners =
       directorMatchRequest && selectedSession
         ? supabaseMembers
             .filter(
-              (member: any) =>
-                String(member.club_id) === directorSelectedClubId &&
+              (member: any, index: number, members: any[]) =>
                 member.is_active !== false &&
+                index === members.findIndex((candidate: any) => String(candidate.nz_bridge_number) === String(member.nz_bridge_number)) &&
                 String(member.nz_bridge_number) !==
                   String(directorMatchRequest.nz_bridge_number) &&
                 String(member.nz_bridge_number) !==
@@ -9887,13 +10175,7 @@ React.useEffect(() => {
                   .includes(directorPartnerLastNameFilter)
             )
             .sort((firstMember: any, secondMember: any) =>
-              `${firstMember.first_name || ""} ${
-                firstMember.last_name || ""
-              }`.localeCompare(
-                `${secondMember.first_name || ""} ${
-                  secondMember.last_name || ""
-                }`
-              )
+              compareDirectorPartners(firstMember, secondMember, directorLookingPartnerNumbers, directorSelectedClubId)
             )
         : [];
 
@@ -9944,7 +10226,9 @@ React.useEffect(() => {
     return (
       <main style={styles.page}>
         <div style={styles.container}>
+          <div style={styles.stickyHeader}>
           <Nav
+            roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             view={view}
             setView={navigateFromSessionDetail}
             notifications={notifications}
@@ -9986,6 +10270,7 @@ React.useEffect(() => {
                   : filterName}
               </button>
             ))}
+          </div>
           </div>
 
           <Card>        
@@ -10038,21 +10323,7 @@ React.useEffect(() => {
                 </span>
               </div>
 
-              {isCurrentUserDirector && (
-                <span
-                  style={{
-                    flexShrink: 0,
-                    padding: "3px 10px",
-                    borderRadius: "999px",
-                    background: "#dc2626",
-                    color: "white",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                  }}
-                >
-                  Director
-                </span>
-              )}
+
             </div>
    
             <div style={{ marginTop: "24px" }}>
@@ -10424,9 +10695,17 @@ React.useEffect(() => {
                               key={interest.interest_id}
                               style={styles.interestedPlayerCard}
                             >
-                              <div
+                              <button
+                                type="button"
                                 style={{
                                   ...styles.name,
+                                  border: "none",
+                                  background: "transparent",
+                                  padding: 0,
+                                  margin: 0,
+                                  textAlign: "left",
+                                  fontFamily: "inherit",
+                                  minHeight: "44px",
                                   cursor: "pointer",
                                   textDecoration: "underline",
                                   textUnderlineOffset: "3px",
@@ -10436,13 +10715,9 @@ React.useEffect(() => {
                                 }}
                               >
                                 {interestedPlayer?.first_name} {interestedPlayer?.last_name}
-                              </div>
+                              </button>
 
-                              {renderVisiblePlayerCardDetails(
-                                interest.interested_nz_bridge_number
-                              )}
-
-                              <div style={styles.buttonRow}>
+                              <div style={styles.interestedPlayerActions}>
 
                                 <button
                                   type="button"
@@ -10881,8 +11156,24 @@ React.useEffect(() => {
                           }}
                         >
                           <div style={styles.name}>
-                            {standbyPlayer.first_name || "Unknown"}{" "}
-                            {standbyPlayer.last_name || "player"}
+                            <button
+                              type="button"
+                              onClick={() => setProfileToView(standbyPlayer)}
+                              style={{
+                                color: "inherit",
+                                font: "inherit",
+                                background: "none",
+                                border: "none",
+                                padding: 0,
+                                cursor: "pointer",
+                                textAlign: "left",
+                                textDecoration: "underline",
+                                textUnderlineOffset: "3px",
+                              }}
+                            >
+                              {standbyPlayer.first_name || "Unknown"}{" "}
+                              {standbyPlayer.last_name || "player"}
+                            </button>
                           </div>
 
                           <div style={styles.text}>
@@ -11220,7 +11511,7 @@ React.useEffect(() => {
                                 cancelledByMember.last_name || ""
                               }`.trim()
                             : match.cancelled_by_nz_bridge_number
-                              ? `NZ Bridge #${match.cancelled_by_nz_bridge_number}`
+                              ? "Player"
                               : "Not recorded";
 
                           return (
@@ -11256,7 +11547,15 @@ React.useEffect(() => {
         </div>
 
         {directorMatchRequest && isCurrentUserDirector && (
-          <div
+          <ModalBackdrop onDismiss={() => {
+                    setDirectorMatchRequest(null);
+                    setDirectorMatchPartnerSearch("");
+                    setDirectorMatchPartnerSurnameSearch("");
+                    setDirectorMatchClubId("");
+                    setDirectorMatchPartnerNumber("");
+                    setDirectorMatchStandbyId(null);
+                    setDirectorMatchNote("");
+                  }}
             style={{
               position: "fixed",
               top: 0,
@@ -11464,7 +11763,7 @@ React.useEffect(() => {
                           >
                             <span style={{ fontWeight: 700 }}>
                               {standbyPlayer.first_name || "Unknown"}{" "}
-                              {standbyPlayer.last_name || "player"}
+                              {standbyPlayer.last_name || "player"}, {directorPartnerLevel(standbyPlayer, supabaseMembers, visibleMemberProfiles)}
                             </span>
                             <span
                               style={{
@@ -11516,12 +11815,14 @@ React.useEffect(() => {
                         >
                           <span style={{ fontWeight: 700 }}>
                             {member.first_name || "Unknown"}{" "}
-                            {member.last_name || "player"}
+                            {member.last_name || "player"}, {directorPartnerLevel(member, supabaseMembers, visibleMemberProfiles)}
                           </span>
                           <span
                             style={{ color: "#64748b", fontSize: "12px" }}
                           >
-                            NZ Bridge #{member.nz_bridge_number}
+                            {directorLookingPartnerNumbers.has(String(member.nz_bridge_number))
+                                ? "Looking"
+                                : directorPartnerClub(member)}
                           </span>
                         </button>
                       );
@@ -11668,7 +11969,6 @@ React.useEffect(() => {
 
                 <Button
                   secondary={true}
-                  disabled={!directorMatchPartnerNumber}
                   onClick={() => {
                     setDirectorMatchRequest(null);
                     setDirectorMatchPartnerSearch("");
@@ -11683,11 +11983,14 @@ React.useEffect(() => {
                 </Button>
               </div>
             </div>
-          </div>
+          </ModalBackdrop>
         )}
 
         {interestToDecline && (
-          <div
+          <ModalBackdrop onDismiss={() => {
+                    setInterestToDecline(null);
+                    setDeclineReason("");
+                  }}
             style={{
               position: "fixed",
               top: 0,
@@ -11793,11 +12096,14 @@ React.useEffect(() => {
                 </Button>
               </div>
             </div>
-          </div>
+          </ModalBackdrop>
         )}
 
         {matchToCancel && (
-          <div
+          <ModalBackdrop onDismiss={() => {
+                    setMatchToCancel(null);
+                    setMatchCancelReason("");
+                  }}
             style={{
               position: "fixed",
               top: 0,
@@ -11963,122 +12269,13 @@ React.useEffect(() => {
                 </Button>
               </div>
             </div>
-          </div>
+          </ModalBackdrop>
         )}
 
-        {profileToView && (
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(15, 23, 42, 0.45)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 1000,
-              padding: "24px",
-            }}
-          >
-            <div
-              style={{
-                background: "white",
-                borderRadius: "20px",
-                padding: "32px",
-                width: "100%",
-                maxWidth: "460px",
-                boxShadow: "0 24px 80px rgba(15, 23, 42, 0.25)",
-              }}
-            >
-              <h2 style={styles.sectionTitle}>
-                {profileToView.first_name} {profileToView.last_name}
-              </h2>
-
-              <div style={styles.text}>
-                Level:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.level,
-                  profileToView.level_visible,
-                  "Not completed"
-                )}
-              </div>
-
-              <div style={styles.text}>
-                Systems:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.systems,
-                  profileToView.systems_visible,
-                  "Not completed"
-                )}
-              </div>
-
-              <div style={styles.text}>
-                Club:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.clubs,
-                  profileToView.club_visible,
-                  "Not listed"
-                )}
-              </div>
-
-              <div
-                style={{
-                  marginTop: "24px",
-                  display: "flex",
-                  gap: "10px",
-                  flexWrap: "wrap",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChatPartner(profileToView);
-                    setChatReturnView(view);
-                    setProfileToView(null);
-                    setView("chat");
-                  }}
-                  style={{
-                    background: "#2b8792",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Chat
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setProfileToView(null)}
-                  style={{
-                    background: "#2b8792",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {renderPlayerProfileModal()}
 
          {showRequestTypeModal && (
-          <div
+          <ModalBackdrop onDismiss={() => setShowRequestTypeModal(false)}
             style={{
               position: "fixed",
               top: 0,
@@ -12245,11 +12442,13 @@ React.useEffect(() => {
                 </Button>
               </div>
             </div>
-          </div>
+          </ModalBackdrop>
         )}
 
         {showStandbyModal && (
-          <div
+          <ModalBackdrop onDismiss={() => {
+                    setShowStandbyModal(false);
+                  }}
             style={{
               position: "fixed",
               top: 0,
@@ -12599,11 +12798,11 @@ React.useEffect(() => {
                 </Button>
               </div>
             </div>
-          </div>
+          </ModalBackdrop>
         )}
 
         {requestToRemove && (
-          <div
+          <ModalBackdrop onDismiss={() => setRequestToRemove(null)}
             style={{
               position: "fixed",
               top: 0,
@@ -12653,7 +12852,7 @@ React.useEffect(() => {
                 </Button>
               </div>
             </div>
-          </div>
+          </ModalBackdrop>
         )}
 
       </main>
@@ -12679,6 +12878,14 @@ React.useEffect(() => {
         };
       })
       .filter((standbySession: any) => standbySession.session)
+      .filter((standbySession: any) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return new Date(standbySession.session.session_date + "T00:00:00") >= today;
+      })
+      .filter((standbySession: any, index: number, records: any[]) =>
+        index === records.findIndex(record =>
+          String(record.session_instance_id) === String(standbySession.session_instance_id)))
       .sort(
         (a: any, b: any) =>
           new Date(
@@ -12692,7 +12899,9 @@ React.useEffect(() => {
     return (
       <main style={styles.page}>
         <div style={styles.container}>
+          <div style={styles.stickyHeader}>
           <Nav
+            roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -12710,8 +12919,10 @@ React.useEffect(() => {
               matchCount={filteredMatches.length}
             />
           )}
+          </div>
 
           <h1 style={styles.sectionTitle}>Standbys</h1>
+          {standbyCancellationError && <p role="alert">{standbyCancellationError}</p>}
 
           {activeMyStandbys.length === 0 && (
             <Card>
@@ -12723,20 +12934,14 @@ React.useEffect(() => {
           )}
 
           {activeMyStandbys.map((standbySession: any) => (
+            <div key={`my-standby-${standbySession.session_instance_id}`}
+              style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: "16px", alignItems: "center", marginBottom: "16px" }}>
             <Card
-              key={`my-standby-${standbySession.standby_id}`}
-              onClick={() => {
-                setSessionReturnView("myStandbys");
-                setSelectedSessionId(
-                  standbySession.session.session_instance_id
-                );
-                setSessionDetailFilter("Active");
-                setView("sessionDetail");
-              }}
             >
               <div>
-                <span
+                <button type="button" onClick={() => openCalendarSession(standbySession.session)}
                   style={{
+                    border: "none", background: "transparent", padding: 0, fontFamily: "inherit",
                     color: "#4338ca",
                     fontWeight: 700,
                     fontSize: "16px",
@@ -12754,7 +12959,7 @@ React.useEffect(() => {
                   })}
                   {" · "}
                   {standbySession.session.start_time?.slice(0, 5)}
-                </span>
+                </button>
 
                 <span
                   style={{
@@ -12770,12 +12975,14 @@ React.useEffect(() => {
                       color:
                         standbySession.session.location_type === "Online"
                           ? "#16a34a"
+                          : standbySession.session.location_type === "Tournaments"
+                          ? "#dc2626"
                           : "#f59e0b",
                       fontSize: "13px",
                       marginLeft: "6px",
                     }}
                   >
-                    ({standbySession.session.location_type})
+                    ({standbySession.session.location_type === "Tournaments" ? "Tournament" : standbySession.session.location_type})
                   </span>
                 </span>
               </div>
@@ -12789,6 +12996,12 @@ React.useEffect(() => {
                 Standby status: <strong>Available</strong>
               </div>
             </Card>
+            <button type="button" style={styles.compactSecondaryAction}
+              disabled={cancellingStandbySessionId !== null}
+              onClick={() => cancelListedStandby(standbySession)}>
+              {cancellingStandbySessionId === String(standbySession.session_instance_id) ? "Cancelling..." : "Cancel Standby"}
+            </button>
+            </div>
           ))}
         </div>
       </main>
@@ -12799,7 +13012,9 @@ React.useEffect(() => {
     return (
       <main style={styles.page}>
         <div style={styles.container}>
+          <div style={styles.stickyHeader}>
           <Nav
+            roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -12906,6 +13121,7 @@ React.useEffect(() => {
               <option value="date">Sort by: Date</option>
               <option value="name">Sort by: Name</option>
             </select>
+          </div>
           </div>      
 
           {myMatches.length === 0 && (
@@ -12958,14 +13174,7 @@ React.useEffect(() => {
                     <div>
                       <button
                         type="button"
-                        onClick={() => {
-                          setSessionReturnView("matches");
-                          setSelectedSessionId(match.session_instance_id);
-                          setSessionDetailFilter(
-                            match.match_status === "Cancelled" ? "Cancelled" : "Matched"
-                          );
-                          setView("sessionDetail");
-                        }}
+                        onClick={() => openCalendarSession(session)}
                         style={{
                           border: "none",
                           background: "transparent",
@@ -13066,121 +13275,13 @@ React.useEffect(() => {
           })}
         </div>
 
-        {profileToView && (
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(15, 23, 42, 0.45)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 1000,
-              padding: "24px",
-            }}
-          >
-            <div
-              style={{
-                background: "white",
-                borderRadius: "20px",
-                padding: "32px",
-                width: "100%",
-                maxWidth: "460px",
-                boxShadow: "0 24px 80px rgba(15, 23, 42, 0.25)",
-              }}
-            >
-              <h2 style={styles.sectionTitle}>
-                {profileToView.first_name} {profileToView.last_name}
-              </h2>
-
-              <div style={styles.text}>
-                Level:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.level || profileToView.level_name,
-                  profileToView.level_visible,
-                  "Not completed"
-                )}
-              </div>
-
-              <div style={styles.text}>
-                Systems:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.systems,
-                  profileToView.systems_visible,
-                  "Not completed"
-                )}
-              </div>
-
-              <div style={styles.text}>
-                Club:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.clubs,
-                  profileToView.club_visible,
-                  "Not listed"
-                )}
-              </div>
-
-              <div
-                style={{
-                  marginTop: "24px",
-                  display: "flex",
-                  gap: "10px",
-                  flexWrap: "wrap",
-                }}
-              >
-                {String(profileToView.nz_bridge_number) !== String(currentMember?.nz_bridge_number) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setChatPartner(profileToView);
-                      setChatReturnView(view);
-                      setProfileToView(null);
-                      setView("chat");
-                    }}
-                    style={{
-                      background: "#2b8792",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "999px",
-                      padding: "8px 16px",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Chat
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setProfileToView(null)}
-                  style={{
-                    background: "#2b8792",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {renderPlayerProfileModal()}
 
        {matchToCancel && (
-            <div
+            <ModalBackdrop onDismiss={() => {
+                  setMatchToCancel(null);
+                  setMatchCancelReason("");
+                }}
               style={{
                 position: "fixed",
                 top: 0,
@@ -13291,7 +13392,7 @@ React.useEffect(() => {
               </Button>
             </div>
             </div>
-          </div>
+          </ModalBackdrop>
         )}
 
       </main>
@@ -13302,7 +13403,9 @@ React.useEffect(() => {
   return (
     <main style={styles.page}>
       <div style={styles.container}>
+          <div style={styles.stickyHeader}>
           <Nav
+            roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -13320,6 +13423,7 @@ React.useEffect(() => {
               matchCount={filteredMatches.length}
             />
           )}
+          </div>
 
             <div style={{ marginTop: "8px" }}></div>
 
@@ -13609,116 +13713,7 @@ React.useEffect(() => {
           );
         })}
 
-        {profileToView && (
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(15, 23, 42, 0.45)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 1000,
-              padding: "24px",
-            }}
-          >
-            <div
-              style={{
-                background: "white",
-                borderRadius: "20px",
-                padding: "32px",
-                width: "100%",
-                maxWidth: "460px",
-                boxShadow: "0 24px 80px rgba(15, 23, 42, 0.25)",
-              }}
-            >
-              <h2 style={styles.sectionTitle}>
-                {profileToView.first_name} {profileToView.last_name}
-              </h2>
-
-              <div style={styles.text}>
-                Level:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.level || profileToView.level_name,
-                  profileToView.level_visible,
-                  "Not completed"
-                )}
-              </div>
-
-              <div style={styles.text}>
-                Systems:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.systems,
-                  profileToView.systems_visible,
-                  "Not completed"
-                )}
-              </div>
-
-              <div style={styles.text}>
-                Club:{" "}
-                {visibleProfileDetail(
-                  profileToView,
-                  profileToView.clubs,
-                  profileToView.club_visible,
-                  "Not listed"
-                )}
-              </div>
-
-              <div
-                style={{
-                  marginTop: "24px",
-                  display: "flex",
-                  gap: "10px",
-                  flexWrap: "wrap",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChatPartner(profileToView);
-                    setChatReturnView(view);
-                    setProfileToView(null);
-                    setView("chat");
-                  }}
-                  style={{
-                    background: "#2b8792",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Chat
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setProfileToView(null)}
-                  style={{
-                    background: "#e0f2f4",
-                    color: "#064e5f",
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {renderPlayerProfileModal()}
       </div>
     </main>
   );
@@ -13728,7 +13723,9 @@ React.useEffect(() => {
     return (
       <main style={styles.page}>
         <div style={styles.container}>
+          <div style={styles.stickyHeader}>
           <Nav
+            roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -13746,6 +13743,7 @@ React.useEffect(() => {
               matchCount={filteredMatches.length}
             />
           )}
+          </div>
 
           {chatListItems.length === 0 && (
             <Card>
@@ -13922,7 +13920,9 @@ React.useEffect(() => {
     return (
       <main style={styles.page}>
         <div style={styles.container}>
+          <div style={styles.stickyHeader}>
           <Nav
+            roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -13940,6 +13940,7 @@ React.useEffect(() => {
               matchCount={filteredMatches.length}
             />
           )}
+          </div>
 
           <Card>
             <div style={styles.chatConversationTop}>
@@ -14415,7 +14416,10 @@ React.useEffect(() => {
           </Card>
 
           {chatBlockAction && (
-            <div style={styles.modalOverlay}>
+            <ModalBackdrop onDismiss={() => {
+                      setChatBlockAction(null);
+                      setChatBlockError("");
+                    }} dismissDisabled={isChatBlockSaving} style={styles.modalOverlay}>
               <div style={styles.chatBlockModal}>
                 <h2 style={{ ...styles.sectionTitle, marginTop: 0 }}>
                   {chatBlockAction === "block"
@@ -14476,7 +14480,7 @@ React.useEffect(() => {
                   </button>
                 </div>
               </div>
-            </div>
+            </ModalBackdrop>
           )}
         </div>
       </main>
@@ -14487,7 +14491,9 @@ React.useEffect(() => {
     return (
       <main style={styles.page}>
         <div style={styles.container}>
+          <div style={styles.stickyHeader}>
           <Nav
+            roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -14582,26 +14588,17 @@ React.useEffect(() => {
               </button>
             )}
           </div>
+          </div>
 
           <div style={styles.directoryPlayerList}>
             {filteredDirectoryPlayers.map((player: any) => {
-              const matchingSupabaseMember = supabaseMembers.find(
-                (member: any) =>
-                  String(member.email || "").toLowerCase().trim() ===
-                  String(player.email || "").toLowerCase().trim()
-              );
-
-              const playerNumber = Number(
-                player.nz_bridge_number ||
-                  matchingSupabaseMember?.nz_bridge_number
-              );
-              const playerNumberKey = Number.isFinite(playerNumber)
-                ? String(playerNumber)
-                : `csv-${String(player.member_id || player.email || `${player.first_name}-${player.last_name}`)}`;
+              const playerNumber = Number(player.nz_bridge_number);
+              const playerNumberKey = String(playerNumber);
               const isCurrentPlayer =
                 playerNumberKey ===
                 String(currentMember?.nz_bridge_number || "");
-              const visibleProfile = visibleMemberProfiles[playerNumberKey];
+              const visibleProfile = staffProfiles[playerNumberKey] || visibleMemberProfiles[playerNumberKey];
+              const directoryStaffProfile = staffProfiles[playerNumberKey];
               const playerIdentity = {
                 ...player,
                 ...(!visibleProfile?._profileLoadError
@@ -14643,6 +14640,9 @@ React.useEffect(() => {
                     <div style={styles.directoryPlayerSummary}>
                       <div style={styles.directoryPlayerName}>
                         {playerIdentity.first_name} {playerIdentity.last_name}
+                        {directoryStaffProfile?.role_title && <span style={{ color: "#dc2626", fontWeight: 600 }}>
+                          {" "}({directoryStaffProfile.role_title})
+                        </span>}
                         {isCurrentPlayer ? " (You)" : ""}
                       </div>
                       {visibleClub && (
@@ -14920,6 +14920,13 @@ React.useEffect(() => {
                   ? "Create account"
                   : "Log in"}
             </button>
+            <button type="button" onClick={loginWithGoogle}
+              disabled={isLandingAuthSubmitting} style={styles.landingPrimaryButton}>
+              Continue with Google
+            </button>
+            {landingAuthMode === "register" && (
+              <p style={styles.smallText}>Everyone is welcome. Club membership and an NZ Bridge number are optional. Use the same email for Google and password login to keep one account.</p>
+            )}
           </form>
 
           <div style={styles.landingRegisterPrompt}>
@@ -15421,6 +15428,14 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: "0.2px",
     textAlign: "center",
   },
+  stickyHeader: {
+    position: "sticky",
+    top: 0,
+    zIndex: 20,
+    background: "#f8fafc",
+    paddingTop: "8px",
+    paddingBottom: "8px",
+  },
   page: {
     minHeight: "100vh",
     background: "#f8fafc",
@@ -15812,11 +15827,19 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.35,
   },
   interestedPlayerCard: {
-    marginTop: "10px",
-    padding: "12px 14px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    borderRadius: "12px",
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px 16px",
+    padding: "8px 0",
+    borderBottom: "1px solid #e2e8f0",
+  },
+  interestedPlayerActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginLeft: "auto",
   },
   myStatusSummary: {
     margin: "14px 0 4px",

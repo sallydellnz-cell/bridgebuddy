@@ -24,3 +24,221 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.calendar-page .calendar-navigation {
+  position: static !important;
+}
+
+.calendar-filters {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #f8fafc;
+  padding: 8px 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(220px, 1.4fr);
+  align-items: start;
+  gap: 12px;
+  margin: 12px 0 16px;
+}
+
+.calendar-filters > * {
+  min-width: 0;
+}
+
+.calendar-filters summary {
+  min-height: 44px;
+  padding: 10px 12px !important;
+  font-size: 16px !important;
+}
+
+.calendar-filters details label {
+  align-items: center;
+  min-height: 44px;
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.calendar-filters input[type="radio"],
+.calendar-filters input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: #4338ca;
+}
+
+.calendar-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-date-filter input {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  font-size: 16px !important;
+  color-scheme: light;
+}
+
+.calendar-date-control {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+  .calendar-date-control {
+    border-radius: 10px;
+    background: #f8fafc;
+    box-shadow: inset 0 0 0 1px #cbd5e1;
+  }
+
+  .calendar-date-control:focus-within {
+    outline: 2px solid #4338ca;
+    outline-offset: 2px;
+  }
+
+  .calendar-date-control input {
+    /* Keep the native picker tappable even when iOS renders no placeholder. */
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .calendar-date-control input::-webkit-calendar-picker-indicator {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .calendar-date-prompt {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    color: #475569;
+    font-size: 16px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .calendar-date-prompt svg {
+    flex-shrink: 0;
+  }
+
+.calendar-date-filter button {
+  min-height: 44px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.calendar-clear-icon {
+  display: none;
+}
+
+.calendar-level-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 12px 0;
+  margin-bottom: 16px;
+  border-top: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.calendar-level-key span {
+  white-space: nowrap;
+}
+
+/* Compact calendar layout for phone-sized viewports; tablets keep the legend. */
+@media (max-width: 767px) {
+  .calendar-page {
+    padding: 8px 12px 96px !important;
+  }
+
+  .calendar-page .calendar-navigation {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .calendar-page .calendar-level-key {
+    display: none;
+  }
+
+  .calendar-clear-label {
+    display: none;
+  }
+
+  .calendar-clear-icon {
+    display: block;
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  .calendar-date-filter button {
+    width: 44px;
+    padding: 0 !important;
+  }
+
+  .calendar-page .personal-menu {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .calendar-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0 0 8px;
+    padding: 6px 0;
+  }
+
+  .calendar-page [id^="session-card-"] {
+    padding: 12px 14px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .calendar-session-content {
+    flex-direction: column;
+    gap: 8px !important;
+  }
+
+  .calendar-session-content > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .calendar-session-heading {
+    line-height: 1.5;
+  }
+
+  .calendar-session-heading > span {
+    display: block;
+    margin: 4px 0 0 !important;
+    font-size: 16px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .calendar-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Keep the explanatory legend on tablet and desktop layouts, including touchscreens. */
+@media (min-width: 768px) {
+  .calendar-page .calendar-level-key {
+    display: flex;
+  }
+}
