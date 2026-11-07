@@ -128,6 +128,7 @@ function Button({
 
 function Nav({
   roleTitle,
+  isDirector,
   view,
   setView,
   notifications,
@@ -142,6 +143,7 @@ function Nav({
   unreadChatCount: number;
   matchCount: number;
   roleTitle?: string;
+  isDirector: boolean;
 }) {
   const mainMenuItems = [
     { viewName: "sessions", label: "Calendar", icon: "📅", count: 0 },
@@ -221,7 +223,7 @@ function Nav({
             />
           </svg>
         </button>
-        {roleTitle && (
+        {(roleTitle || isDirector) && (
           <span
             style={{
               position: "absolute",
@@ -243,7 +245,7 @@ function Nav({
               fontWeight: 700,
             }}
           >
-            {roleTitle}
+            {roleTitle || "Director"}
           </span>
         )}
       </div>
@@ -4014,6 +4016,7 @@ React.useEffect(() => {
           <div style={styles.stickyHeader}>
           <Nav
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -5059,6 +5062,7 @@ React.useEffect(() => {
           >
           <Nav
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -7418,6 +7422,7 @@ React.useEffect(() => {
           <div style={styles.stickyHeader}>
           <Nav
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={navigateFromSessionDetail}
             notifications={notifications}
@@ -10229,6 +10234,7 @@ React.useEffect(() => {
           <div style={styles.stickyHeader}>
           <Nav
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={navigateFromSessionDetail}
             notifications={notifications}
@@ -12902,6 +12908,7 @@ React.useEffect(() => {
           <div style={styles.stickyHeader}>
           <Nav
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -13015,6 +13022,7 @@ React.useEffect(() => {
           <div style={styles.stickyHeader}>
           <Nav
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -13406,6 +13414,7 @@ React.useEffect(() => {
           <div style={styles.stickyHeader}>
           <Nav
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -13726,6 +13735,7 @@ React.useEffect(() => {
           <div style={styles.stickyHeader}>
           <Nav
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -13923,6 +13933,7 @@ React.useEffect(() => {
           <div style={styles.stickyHeader}>
           <Nav
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
@@ -14494,6 +14505,7 @@ React.useEffect(() => {
           <div style={styles.stickyHeader}>
           <Nav
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+            isDirector={isCurrentUserDirector}
             view={view}
             setView={setView}
             notifications={notifications}
