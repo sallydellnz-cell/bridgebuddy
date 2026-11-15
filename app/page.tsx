@@ -780,9 +780,9 @@ function readBrowserRoute(): BrowserRoute {
   const [section, identifier] = routeSegments;
 
   if (!section) return { view: "landing" };
-  if (section === "login") return { view: "login" };
-  if (section === "create-profile") return { view: "createProfile" };
-  if (section === "complete-profile") return { view: "completeProfile" };
+  if (section === "login") return { view: "landing" };
+  if (section === "create-profile") return { view: "landing" };
+  if (section === "complete-profile") return { view: "landing" };
   if (section === "account") return { view: "account" };
   if (section === "standbys") return { view: "myStandbys" };
   if (section === "matches") return { view: "matches" };
@@ -1071,7 +1071,6 @@ export default function BridgeBuddy() {
   }, []);
 
   const [csvSessions, setCsvSessions] = useState<any[]>([]);
-  const [csvMembers, setCsvMembers] = useState<any[]>([]);
   const [profileEmail, setProfileEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [confirmLoginPassword, setConfirmLoginPassword] = useState("");
@@ -1086,9 +1085,6 @@ export default function BridgeBuddy() {
     useState(false);
   const [rememberLogin, setRememberLogin] = useState(false);
   const authLoadVersion = React.useRef(0);
-  const [foundMembers, setFoundMembers] = useState<any[]>([]);
-  const [verificationSent, setVerificationSent] = useState(false);
-  const [verificationCode, setVerificationCode] = useState(""); 
   const [selectedLevel, setSelectedLevel] = useState("");
   const [currentMember, setCurrentMember] = useState<any>(null);
   const isCurrentUserDirector = supabaseClubMemberRoles.some(
@@ -1260,15 +1256,8 @@ export default function BridgeBuddy() {
   }, [staffProfiles, currentMember, supabaseClubMemberRoles, isAccountEditing]);
 
   const directoryMembers = React.useMemo(() => {
-    const legacyDirectoryEmails = new Set(
-      csvMembers
-        .filter(member => String(member.profile_completed || "").trim().toLowerCase() === "yes")
-        .map(member => String(member.email || "").trim().toLowerCase())
-        .filter(Boolean)
-    );
     const completed = supabaseMembers.filter(
       member => String(member.profile_completed || "").trim().toLowerCase() === "yes"
-        || legacyDirectoryEmails.has(String(member.email || "").trim().toLowerCase())
         || !!staffRoleFor(member, supabaseClubMemberRoles)
     );
     const seenNumbers = new Set<string>();
@@ -1281,7 +1270,7 @@ export default function BridgeBuddy() {
       seenNumbers.add(number);
       return true;
     }).map(member => ({ ...member, profile_completed: "yes" }));
-  }, [csvMembers, supabaseMembers, supabaseClubMemberRoles]);
+  }, [supabaseMembers, supabaseClubMemberRoles]);
 
   const visibleProfileNumbersKey = React.useMemo(() => {
     const profileNumbers = [
@@ -1667,9 +1656,7 @@ React.useEffect(() => {
     setCsvSessions(data);
   });
 
-  loadCsv("/members.csv").then((data: any) => {
-    setCsvMembers(data);
-  });
+
 
 }, []);
 
@@ -1717,7 +1704,11 @@ React.useEffect(() => {
 
     setProfileToViewState(safeIdentity);
 
-    const profileLookup = isCurrentUserDirector
+    const sessionStaffContext = isCurrentUserStaff && selectedSessionId &&
+      (view === "sessionDetail" || view === "tournamentDetail");
+    const profileLookup = sessionStaffContext
+      ? supabase.rpc("get_session_staff_profile", {p_target: targetNzBridgeNumber, p_session: selectedSessionId})
+      : isCurrentUserDirector
       ? supabase.rpc("get_director_member_profile", {
           p_target_nz_bridge_number: targetNzBridgeNumber,
         })
@@ -2041,7 +2032,6 @@ React.useEffect(() => {
   }, [notifications]);
 
   
-  const [selectedProfileMember, setSelectedProfileMember] = useState<any>(null);
   const [showForm, setShowForm] = useState(false);
   const [requestedView, setView] = useState("landing");
   const view = !isRestoringLogin && !currentMember?.nz_bridge_number
@@ -3874,113 +3864,7 @@ React.useEffect(() => {
     );
   }
 
-  if (view === "completeProfile" && selectedProfileMember) {
-  return (
-    <main style={styles.container}>
-      <div style={{ marginBottom: "24px" }}>
-        <Button onClick={() => setSelectedProfileMember(null)}>
-          ← Back
-        </Button>
-      </div>
 
-      <Card>
-        <h1 style={styles.sectionTitle}>Complete Profile</h1>
-
-        <p style={styles.text}>
-          Welcome, {selectedProfileMember.first_name} {selectedProfileMember.last_name}
-        </p>
-
-        <div style={{ marginTop: "24px" }}>
-
-          <label style={{ display: "block", marginBottom: "8px" }}>
-            Bridge level
-          </label>
-
-          <select
-            value={selectedLevel}
-            onChange={(e) => setSelectedLevel(e.target.value)}
-          
-            style={{
-              width: "100%",
-              padding: "14px",
-              borderRadius: "12px",
-              border: "1px solid #cbd5e1",
-              marginBottom: "20px",
-              fontSize: "16px",
-            }}
-          >
-          {supabaseLevels.map((level: any) => (
-            <option key={level.level_id}>
-              {level.level_name}
-            </option>
-          ))}
-
-          </select>
-
-          <label style={{ display: "block", marginBottom: "8px" }}>
-            Preferred systems
-          </label>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-              marginBottom: "20px",
-            }}
-          >
-            {supabaseSystems.map((system: any) => (
-              <label
-                key={system.system_id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedSystems.includes(system.system_name)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedSystems([
-                        ...selectedSystems,
-                        system.system_name,
-                      ]);
-                    } else {
-                      setSelectedSystems(
-                        selectedSystems.filter(
-                          (item) => item !== system.system_name
-                        )
-                      );
-                    }
-                  }}
-                />
-
-                {system.system_name}
-              </label>
-            ))}
-          </div>
-
-          <Button
-            onClick={() => {
-              if (!selectedLevel || selectedSystems.length === 0) {
-                alert("Please select your level and at least one system.");
-                return;
-              }
-
-            setView("sessions");
-            }}
-          >
-            Save profile
-          </Button>
-
-        </div>
-
-      </Card>
-    </main>
-  );
-}
 
   if (view === "account") {
     const accountInitials = `${currentMember?.first_name?.[0] || ""}${
@@ -4893,164 +4777,6 @@ React.useEffect(() => {
       </main>
     );
   }
-
-  if (view === "login") {
-    return (
-      <main style={styles.container}>
-
-        <Card>
-          <h1 style={styles.sectionTitle}>Login</h1>
-          <p style={styles.text}>
-            Enter your email to access your sessions.
-          </p>
-
-          <input
-            type="email"
-            placeholder="Enter your email"
-            value={profileEmail}
-            onChange={(e) => setProfileEmail(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "16px",
-              borderRadius: "12px",
-              border: "1px solid #cbd5e1",
-              marginBottom: "20px",
-              fontSize: "16px",
-            }}
-          />
-
-          <Button
-            onClick={() => {
-              const member = supabaseMembers.find(
-                (member: any) =>
-                  member.email?.toLowerCase().trim() ===
-                  profileEmail.toLowerCase().trim()
-              );
-
-              if (!member) {
-                alert("No member found with this email.");
-                return;
-              }
-
-              setCurrentMember(member);
-              console.log("LOGIN MEMBER:", member);
-              setView("sessions");
-            }}
-          >
-            Login
-          </Button>
-        </Card>
-      </main>
-    );
-  }
-
-  if (view === "createProfile") {
-  return (
-    <main style={styles.container}>
-      <div style={{ marginBottom: "24px" }}>
-        <Button onClick={() => setView("landing")}>
-          ← Back
-        </Button>
-      </div>
-
-      <Card>
-        <h1 style={styles.sectionTitle}>Create Profile</h1>
-
-        <p style={styles.text}>
-          Register with your email or Google on the login page, then complete your profile. Club membership is optional.
-        </p>
-
-            <input
-              type="email"
-              placeholder="Enter your email"
-              value={profileEmail}
-              onChange={(e) => setProfileEmail(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "16px",
-                borderRadius: "12px",
-                border: "1px solid #cbd5e1",
-                marginBottom: "20px",
-                fontSize: "16px",
-              }}
-            />
-
-            {foundMembers.length === 0 && (
-              <Button
-                onClick={() => {
-                  const matches = csvMembers.filter((member: any) =>
-                    member.email?.toLowerCase().trim() === profileEmail.toLowerCase().trim()
-                  );
-
-                  setFoundMembers(matches);
-                }}
-              >
-                Find Membership
-              </Button>
-            )}
-
-            {foundMembers.length > 0 && (
-              <div style={{ marginTop: "24px" }}>
-                <h3>Membership found</h3>
-
-                {foundMembers.map((member: any) => (
-                  <Card key={member.member_id}>
-                    <div style={styles.name}>
-                      {member.first_name} {member.last_name}
-                    </div>
-
-                    <div style={styles.text}>{member.clubs}</div>
-                    <div style={styles.text}>Club: {member.clubs}</div>
-                    <div style={styles.text}>Phone: {member.phone || "Not listed"}</div>
-                    <div style={styles.smallText}>Member ID: {member.member_id}</div>
-
-                    <Button
-                      onClick={() => {
-                        setVerificationSent(true);
-                      }}
-                    >
-                      Send verification code
-                    </Button>
-
-                    {verificationSent && (
-                      <div style={{ marginTop: "16px" }}>
-                        <input
-                          type="text"
-                          placeholder="Enter verification code"
-                          value={verificationCode}
-                          onChange={(e) => setVerificationCode(e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "14px",
-                            borderRadius: "12px",
-                            border: "1px solid #cbd5e1",
-                            marginBottom: "12px",
-                            fontSize: "16px",
-                          }}
-                        />
-
-                        <Button
-                          onClick={() => {
-                            if (verificationCode === "123456") {
-                              setSelectedProfileMember(member);
-                            }
-                          }}
-                        >
-                          Verify code
-                        </Button>
-                      </div>
-                    )}
-
-                  </Card>
-                ))}
-              </div>
-            )}
-
-
-      </Card>
-    </main>
-  );
-}
 
   if (view === "sessions" || view === "mySessions") {
     return (
