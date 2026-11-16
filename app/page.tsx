@@ -29,6 +29,29 @@ function calendarType(session: { location_type?: string; event_type?: string }):
   return session.location_type === "Online" ? "Online" : "Clubs";
 }
 
+function ActivitySessionHeading({ session, organiser, onOpen }: {
+  session: { session_date: string; start_time?: string; session_name: string; location_type?: string };
+  organiser?: string;
+  onOpen?: () => void;
+}) {
+  const date = new Date(session.session_date + "T00:00:00").toLocaleDateString("en-NZ", {
+    weekday: "short", day: "numeric", month: "short",
+  });
+  const when = `${date} · ${session.start_time?.slice(0, 5) || "Time unconfirmed"}`;
+  const type = session.location_type;
+  return (
+    <div className="activity-session-heading">
+      {onOpen ? <button type="button" onClick={event => { event.stopPropagation(); onOpen(); }}>{when}</button> : <strong>{when}</strong>}
+      <Organiser name={organiser} />
+      <span className="activity-session-name">{session.session_name}
+        {type && <span style={{ color: type === "Online" ? "#16a34a" : type === "Tournaments" ? "#dc2626" : "#f59e0b" }}>
+          ({type === "Tournaments" ? "Tournament" : type})
+        </span>}
+      </span>
+    </div>
+  );
+}
+
 function Organiser({ name }: { name?: string }) {
   return name ? <span className="session-organiser" title={name}><span aria-hidden="true">📍 </span>{name}</span> : null;
 }
@@ -842,6 +865,7 @@ function readBrowserRoute(): BrowserRoute {
   }
   if (section === "sessions") {
     if (identifier === "looking") return { view: "myLooking" };
+    if (identifier && tab === "looking-status") return { view: "lookingStatus", sessionId: identifier };
     if (identifier === "mine") return { view: "mySessions" };
     return {
       view: identifier ? "sessionDetail" : "sessions",
@@ -2270,7 +2294,9 @@ React.useEffect(() => {
       );
       const isTournament = selectedRouteSession?.location_type === "Tournaments";
 
-      if (isTournament) {
+      if (route.view === "lookingStatus") {
+        setSessionReturnView("myLooking");
+      } else if (isTournament) {
         setView("tournamentDetail");
         const tournamentTabs: Record<string, string> = {
           "my-status": "My Status",
@@ -2346,6 +2372,8 @@ React.useEffect(() => {
       nextUrl = `/players/${encodeURIComponent(
         String(profileToView.nz_bridge_number)
       )}`;
+    } else if (view === "lookingStatus" && selectedSessionId) {
+      nextUrl = `/sessions/${encodeURIComponent(String(selectedSessionId))}?tab=looking-status`;
     } else if (view === "sessionDetail" || view === "tournamentDetail") {
       if (!selectedSessionId) return;
       const selectedTab =
@@ -2983,6 +3011,13 @@ React.useEffect(() => {
 
     const [matchFilters, setMatchFilters] = useState<string[]>(["matched", "cancelled"]);
     const [matchSort, setMatchSort] = useState("date");
+  function sessionOrganiser(session?: (typeof supabaseSessions)[number]) {
+    if (!session) return undefined;
+    return session.club_name || session.clubs
+      || clubSettings.find(c => String(c.club_id) === String(session.club_id))?.club_name
+      || supabaseMembers.find(member => String(member.club_id) === String(session.club_id))?.club_name;
+  }
+
     const personalCalendar = view === "mySessions" || view === "myLooking";
     const calendarView = view === "sessions" ? view : "";
     const calendarPrefs = useCalendarPreferences(calendarUser, currentMember?.nz_bridge_number, calendarView);
@@ -4654,6 +4689,31 @@ React.useEffect(() => {
     );
   }
 
+  if (view === "lookingStatus") {
+    const session = supabaseSessions.find(row => String(row.session_instance_id) === String(selectedSessionId));
+    const activity = personalActivity.get(String(selectedSessionId));
+    const statuses = Array.from(activity?.looking ?? [], label =>
+      label === "Looking for a partner" ? "Looking" : label
+    );
+    return (
+      <main style={styles.page}>
+        <div style={styles.container}>
+          <div style={styles.stickyHeader}>
+            <Nav profileMenu={profileMenu} roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
+              isDirector={isCurrentUserDirector} view="myLooking" setView={setView}
+              notifications={notifications} unreadNotifications={unreadNotifications}
+              unreadChatCount={unreadChatCount} matchCount={filteredMatches.length} />
+          </div>
+          <h1 style={styles.sectionTitle}>My Status</h1>
+          <Card>
+            {session && <ActivitySessionHeading session={session} organiser={sessionOrganiser(session)} />}
+            <div style={styles.smallText}>{statuses.join(" · ") || "No current looking activity."}</div>
+          </Card>
+        </div>
+      </main>
+    );
+  }
+
   if (view === "sessions" || personalCalendar) {
     return (
       <main className="calendar-page" style={styles.page}>
@@ -4728,10 +4788,19 @@ React.useEffect(() => {
           )}
 
           {filteredSessions.map((session: any) => {
+            function openSessionCard() {
+              setSelectedSessionId(session.session_instance_id);
+              setSessionReturnView(view);
+              if (view === "myLooking") {
+                setView("lookingStatus");
+                return;
+              }
+              setSessionDetailFilter("Active");
+              setTournamentDetailFilter(isCurrentUserDirector ? "Looking" : "My Status");
+              setView(session.location_type === "Tournaments" ? "tournamentDetail" : "sessionDetail");
+            }
             const allClubs = personalCalendar || sessionClubFilter === "all";
-            const organiser = session.club_name || session.clubs
-              || clubSettings.find(c => String(c.club_id) === String(session.club_id))?.club_name
-              || supabaseMembers.find(member => String(member.club_id) === String(session.club_id))?.club_name;
+            const organiser = sessionOrganiser(session);
             const cardLegend = clubSettings.find(c => String(c.club_id) === String(session.club_id))?.session_legend;
             if (session.is_club_event) return <Card key={session.session_instance_id}>
               <div className="session-card-top"><strong>{session.session_date} · {session.start_time || "Time unconfirmed"}</strong>{allClubs ? <Organiser name={organiser} /> : <SessionLegendMarker legend={cardLegend} session={session} />}</div>
@@ -4888,46 +4957,17 @@ React.useEffect(() => {
                     ? "matched"
                     : null
                 }
-                onClick={() => {
-                  const currentMemberMatchForSession = supabaseMatches.find(
-                    (match: any) =>
-                      String(match.session_instance_id) === String(session.session_instance_id) &&
-                      match.match_status === "Active" &&
-                      (
-                        String(match.requester_nz_bridge_number) === String(currentMember?.nz_bridge_number) ||
-                        String(match.partner_nz_bridge_number) === String(currentMember?.nz_bridge_number)
-                      )
-                  );
-
-                  setSessionReturnView(view);
-                  setSelectedSessionId(session.session_instance_id);
-                  setSessionDetailFilter("Active");
-                  setTournamentDetailFilter(
-                    isCurrentUserDirector ? "Looking" : "My Status"
-                  );
-                  setView(
-                    session.location_type === "Tournaments"
-                      ? "tournamentDetail"
-                      : "sessionDetail"
-                  );
-                }}
+                onClick={openSessionCard}
               >
               <div className="compact-session-card">
+                {view === "myLooking" ? (
+                  <ActivitySessionHeading session={session} organiser={organiser} onOpen={openSessionCard} />
+                ) : <>
                 <div className="session-card-top"><button
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      setSessionReturnView(view);
-                      setSelectedSessionId(session.session_instance_id);
-                      setSessionDetailFilter("Active");
-                      setTournamentDetailFilter(
-                        isCurrentUserDirector ? "Looking" : "My Status"
-                      );
-                      setView(
-                        session.location_type === "Tournaments"
-                          ? "tournamentDetail"
-                          : "sessionDetail"
-                      );
+                      openSessionCard();
                     }}
                     style={{
                       border: "none",
@@ -4986,6 +5026,7 @@ React.useEffect(() => {
                     )}
                   </>}
                 </div>
+                </>}
 
                 <div className="session-card-bottom">
                   <div
@@ -12202,74 +12243,26 @@ React.useEffect(() => {
           )}
 
           {activeMyStandbys.map((standbySession: any) => (
-            <Card key={`my-standby-${standbySession.session_instance_id}`}>
-              <div className="personal-card-row">
-                <div>
-                  <div>
-                    <button type="button" onClick={() => openCalendarSession(standbySession.session)}
-                      style={{
-                        border: "none", background: "transparent", padding: 0, fontFamily: "inherit",
-                        color: "#4338ca",
-                        fontWeight: 700,
-                        fontSize: "16px",
-                        cursor: "pointer",
-                        textDecoration: "underline",
-                        textUnderlineOffset: "3px",
-                      }}
-                    >
-                      {new Date(
-                        standbySession.session.session_date + "T00:00:00"
-                      ).toLocaleDateString("en-NZ", {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                      })}
-                      {" · "}
-                      {standbySession.session.start_time?.slice(0, 5)}
-                    </button>
+            <div className="personal-card-row standby-row" key={`my-standby-${standbySession.session_instance_id}`}>
+              <Card>
+              <ActivitySessionHeading session={standbySession.session} organiser={sessionOrganiser(standbySession.session)}
+                onOpen={() => openCalendarSession(standbySession.session)} />
 
-                    <span
-                      style={{
-                        color: "#1e293b",
-                        fontSize: "14px",
-                        marginLeft: "8px",
-                      }}
-                    >
-                      {standbySession.session.session_name}
-
-                      <span
-                        style={{
-                          color:
-                            standbySession.session.location_type === "Online"
-                              ? "#16a34a"
-                              : standbySession.session.location_type === "Tournaments"
-                              ? "#dc2626"
-                              : "#f59e0b",
-                          fontSize: "13px",
-                          marginLeft: "6px",
-                        }}
-                      >
-                        ({standbySession.session.location_type === "Tournaments" ? "Tournament" : standbySession.session.location_type})
-                      </span>
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      ...styles.smallText,
-                      marginTop: "2px",
-                    }}
-                  >
-                    Standby: <strong>{standbySession.standby_status}</strong>
-                  </div>
-                </div>
-                {standbySession.standby_status === "Available" && standbySession.session.session_date >= today && <button type="button" style={styles.compactSecondaryAction}
-                  disabled={cancellingStandbySessionId !== null}
-                  onClick={() => cancelListedStandby(standbySession)}>
-                  {cancellingStandbySessionId === String(standbySession.session_instance_id) ? "Cancelling..." : "Cancel Standby"}
-                </button>}
+              <div
+                style={{
+                  ...styles.smallText,
+                  marginTop: "2px",
+                }}
+              >
+                Standby: <strong>{standbySession.standby_status}</strong>
               </div>
-            </Card>
+              </Card>
+              {standbySession.standby_status === "Available" && standbySession.session.session_date >= today && <button type="button" style={styles.compactSecondaryAction}
+                disabled={cancellingStandbySessionId !== null}
+                onClick={() => cancelListedStandby(standbySession)}>
+                {cancellingStandbySessionId === String(standbySession.session_instance_id) ? "Cancelling..." : "Cancel Standby"}
+              </button>}
+            </div>
           ))}
         </div>
       </main>
@@ -12412,106 +12405,105 @@ React.useEffect(() => {
             );
 
             return (
-              <Card key={`${match.match_id}-${match.requester_nz_bridge_number}-${match.partner_nz_bridge_number}-${match.session_instance_id}-${index}`}>
-                <div className="personal-card-row">
-                  <div>
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => openCalendarSession(session)}
-                        style={{
-                          border: "none",
-                          background: "transparent",
-                          padding: 0,
-                          cursor: "pointer",
-                          textAlign: "left",
-                        }}
-                      >
-                        <span
-                          style={{
-                            color: "#4338ca",
-                            fontWeight: 700,
-                            fontSize: "16px",
-                            textDecoration: "underline",
-                            textUnderlineOffset: "3px",
-                          }}
-                        >
-                          {new Date(session?.session_date + "T00:00:00").toLocaleDateString("en-NZ", {
-                            weekday: "short",
-                            day: "numeric",
-                            month: "short",
-                          })}
-                          {" · "}
-                          {String(session?.start_time).slice(0, 5)}
-                        </span>
-
-                        <span
-                          style={{
-                            color: "#1e293b",
-                            fontWeight: 400,
-                            fontSize: "14px",
-                            marginLeft: "8px",
-                          }}
-                        >
-                          {session?.session_name || "Session"}
-                          <span
-                            style={{
-                              color:
-                                session?.location_type === "Online"
-                                  ? "#16a34a"
-                                  : "#f59e0b",
-                              fontSize: "13px",
-                              marginLeft: "6px",
-                            }}
-                          >
-                            ({session?.location_type})
-                          </span>
-                        </span>
-                      </button>
-                    </div>
-
-                    <div
+              <div className="personal-card-row" key={`${match.match_id}-${match.requester_nz_bridge_number}-${match.partner_nz_bridge_number}-${match.session_instance_id}-${index}`}>
+                <Card>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => openCalendarSession(session)}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      padding: 0,
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    <span
                       style={{
-                        color: "#0f172a",
-                        fontWeight: 400,
-                        fontSize: "15px",
-                        overflowWrap: "anywhere",
-                        textAlign: "left",
+                        color: "#4338ca",
+                        fontWeight: 700,
+                        fontSize: "16px",
+                        textDecoration: "underline",
+                        textUnderlineOffset: "3px",
                       }}
                     >
-                      {match.match_status === "Cancelled" ? "Cancelled partnership with" : "Matched with"}{" "}
+                      {new Date(session?.session_date + "T00:00:00").toLocaleDateString("en-NZ", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })}
+                      {" · "}
+                      {String(session?.start_time).slice(0, 5)}
+                    </span>
+                <Organiser name={sessionOrganiser(session)} />
+
+                    <span
+                      style={{
+                        color: "#1e293b",
+                        fontWeight: 400,
+                        fontSize: "14px",
+                        marginLeft: "8px",
+                      }}
+                    >
+                      {session?.session_name || "Session"}
                       <span
                         style={{
-                          color: partner ? "#4338ca" : "#0f172a",
-                          fontWeight: 700,
-                          cursor: partner ? "pointer" : "default",
-                          textDecoration: partner ? "underline" : "none",
-                          textUnderlineOffset: "3px",
-                        }}
-                        onClick={() => {
-                          if (partner) {
-                            setProfileToView(partner);
-                          }
+                          color:
+                            session?.location_type === "Online"
+                              ? "#16a34a"
+                              : "#f59e0b",
+                          fontSize: "13px",
+                          marginLeft: "6px",
                         }}
                       >
-                        {partner?.first_name} {partner?.last_name}
+                        ({session?.location_type})
                       </span>
-                    </div>
-                  </div>
-                  {match.match_status === "Active" &&
-                    session?.session_date >= today && (
-                    <button
-                      style={styles.matchButton}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMatchToCancel(match);
-                      }}
-                    >
-                      Cancel Partnership
-                    </button>
-                  )}
+                    </span>
+                  </button>
                 </div>
-              </Card>
+
+                <div
+                  style={{
+                    color: "#0f172a",
+                    fontWeight: 400,
+                    fontSize: "15px",
+                    overflowWrap: "anywhere",
+                    textAlign: "left",
+                  }}
+                >
+                  {match.match_status === "Cancelled" ? "Cancelled partnership with" : "Matched with"}{" "}
+                  <span
+                    style={{
+                      color: partner ? "#4338ca" : "#0f172a",
+                      fontWeight: 700,
+                      cursor: partner ? "pointer" : "default",
+                      textDecoration: partner ? "underline" : "none",
+                      textUnderlineOffset: "3px",
+                    }}
+                    onClick={() => {
+                      if (partner) {
+                        setProfileToView(partner);
+                      }
+                    }}
+                  >
+                    {partner?.first_name} {partner?.last_name}
+                  </span>
+                </div>
+                </Card>
+                {match.match_status === "Active" &&
+                  session?.session_date >= today && (
+                  <button
+                    style={styles.matchButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMatchToCancel(match);
+                    }}
+                  >
+                    Cancel Partnership
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
