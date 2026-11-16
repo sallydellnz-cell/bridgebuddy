@@ -506,3 +506,28 @@ form + .home-screen-install button { width: 100%; font-weight: 700; }
 @media (hover: none) and (pointer: coarse) and (display-mode: browser) {
   .profile-install-link { display: inline-flex; align-items: center; min-height: 44px; color: #155e68; font-weight: 700; }
 }
+
+.account-profile-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.account-profile-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 44px;
+}
+
+.account-profile-actions > button:last-child {
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .account-profile-actions {
+    gap: 6px;
+  }
+}

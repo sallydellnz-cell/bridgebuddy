@@ -4085,76 +4085,66 @@ React.useEffect(() => {
                 </button>
                 <div
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    flexWrap: "wrap",
+                    color: "#1e293b",
+                    fontSize: "18px",
+                    fontWeight: 700,
                   }}
                 >
-                  <div
-                    style={{
-                      color: "#1e293b",
-                      fontSize: "18px",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {currentMember?.first_name || ""}{" "}
-                    {currentMember?.last_name || ""}
-                  </div>
-
-                  {!isAccountEditing && (
-                    <button
-                      type="button"
-                      onClick={switchAccount}
-                      style={styles.compactPrimaryAction}
-                    >
-                      Switch account
-                    </button>
-                  )}
+                  {currentMember?.first_name || ""}{" "}
+                  {currentMember?.last_name || ""}
                 </div>
               </div>
 
               {!isAccountEditing && (
-                <button
-                  type="button"
-                  disabled={!calendarUser || photoOpen || isAccountProfileLoading || (!isCurrentUserStaff && !profileEditorReady)}
-                  onClick={() => {
-                    setAccountDraftAvatarKey(accountProfile.avatarKey);
-                    setAccountDraftAvatarPhotoPath(
-                      accountProfile.avatarPhotoPath
-                    );
-                    setAccountDraftAvatarFile(null);
-                    setAccountDraftAvatarPreviewUrl("");
-                    setAccountDraftAttitude(accountProfile.attitude);
-                    setAccountDraftNzBridgeLevel(
-                      accountProfile.nzBridgeLevel
-                    );
-                    setAccountDraftPlayingLevelIds(
-                      accountProfile.playingLevelIds
-                    );
-                    setAccountDraftSystemIds(accountProfile.systemIds);
-                    setAccountDraftContactPhone(accountProfile.contactPhone);
-                    setAccountDraftChatAvailability(
-                      accountProfile.chatAvailability
-                    );
-                    setAccountDraftProfileVisibility(
-                      accountProfileVisibility
-                    );
-                    setDraftEmail(accountProfile.contactEmail);
-                    setDraftNumber(String(currentMember?.actual_nz_bridge_number ?? ""));
-                    setDraftClub(String(currentMember?.club_id ?? ""));
-                    setIsAccountEditing(true);
-                  }}
-                  style={{
-                    ...styles.compactPrimaryAction,
-                    opacity: isAccountProfileLoading ? 0.65 : 1,
-                    cursor: isAccountProfileLoading
-                      ? "not-allowed"
-                      : "pointer",
-                  }}
-                >
-                  Edit profile
-                </button>
+                <div className="account-profile-actions">
+                  <button
+                    type="button"
+                    onClick={switchAccount}
+                    style={styles.compactPrimaryAction}
+                  >
+                    Switch account
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!calendarUser || photoOpen || isAccountProfileLoading || (!isCurrentUserStaff && !profileEditorReady)}
+                    onClick={() => {
+                      setAccountDraftAvatarKey(accountProfile.avatarKey);
+                      setAccountDraftAvatarPhotoPath(
+                        accountProfile.avatarPhotoPath
+                      );
+                      setAccountDraftAvatarFile(null);
+                      setAccountDraftAvatarPreviewUrl("");
+                      setAccountDraftAttitude(accountProfile.attitude);
+                      setAccountDraftNzBridgeLevel(
+                        accountProfile.nzBridgeLevel
+                      );
+                      setAccountDraftPlayingLevelIds(
+                        accountProfile.playingLevelIds
+                      );
+                      setAccountDraftSystemIds(accountProfile.systemIds);
+                      setAccountDraftContactPhone(accountProfile.contactPhone);
+                      setAccountDraftChatAvailability(
+                        accountProfile.chatAvailability
+                      );
+                      setAccountDraftProfileVisibility(
+                        accountProfileVisibility
+                      );
+                      setDraftEmail(accountProfile.contactEmail);
+                      setDraftNumber(String(currentMember?.actual_nz_bridge_number ?? ""));
+                      setDraftClub(String(currentMember?.club_id ?? ""));
+                      setIsAccountEditing(true);
+                    }}
+                    style={{
+                      ...styles.compactPrimaryAction,
+                      opacity: isAccountProfileLoading ? 0.65 : 1,
+                      cursor: isAccountProfileLoading
+                        ? "not-allowed"
+                        : "pointer",
+                    }}
+                  >
+                    Edit profile
+                  </button>
+                </div>
               )}
             </div>
 
