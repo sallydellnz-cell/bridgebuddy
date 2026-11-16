@@ -1,0 +1,38 @@
+.header-account-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.header-account-controls > span { min-width: 0; flex-shrink: 1 !important; max-width: 28vw; overflow: hidden; text-overflow: ellipsis; display: block !important; }
+.header-profile-menu { position: relative; }
+.header-profile-trigger {
+  display: grid; place-items: center; box-sizing: border-box; overflow: hidden; width: 44px; height: 44px; padding: 2px;
+  border: 1px solid #bfd2d7; border-radius: 50%; background: #dff3f1; color: #0f665f;
+  font: inherit; font-weight: 700; cursor: pointer;
+}
+.header-profile-trigger img { display: block; width: 38px; height: 38px; border-radius: 50%; object-fit: cover; }
+.header-profile-options {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 60; min-width: 9rem;
+  padding: 4px; background: white; border: 1px solid #cbd5e1; border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .12);
+}
+.header-profile-options button {
+  display: block; width: 100%; min-height: 44px; padding: 6px 12px; text-align: left;
+  background: transparent; border: 0; border-radius: 8px; color: #1e293b; font: inherit; cursor: pointer;
+}
+.header-profile-options button:hover, .header-profile-options button:focus-visible { background: #eef2ff; }
+
+.header-nav-icon {
+  position: relative; display: grid; place-items: center; flex: 0 0 44px;
+  width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: #475569; cursor: pointer;
+}
+.header-nav-icon:hover, .header-nav-icon[aria-current="page"] { color: #4338ca; background: #eef2ff; }
+.header-nav-icon span {
+  position: absolute; top: 0; right: 0; padding: 0 4px; border-radius: 999px;
+  background: #4338ca; color: white; font: 700 11px/16px Arial, sans-serif;
+}
+
+@media (max-width: 767px) {
+  .session-navigation-row { gap: 3px !important; padding: 4px !important; margin-bottom: 8px !important; }
+  .session-navigation-row button { padding-inline: 1px !important; white-space: normal !important; }
+}
+@media (max-width: 360px) {
+  .session-navigation-row button { font-size: 12px !important; }
+}

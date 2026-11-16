@@ -1,5 +1,7 @@
 "use client";
 
+import "./header-profile-menu.css";
+
 import { supabase } from "@/lib/supabase";
 import React, { useEffect, useMemo, useState } from "react";
 import { clubGrade, partnershipEligibility, programmeFor, ClubMembership, ClubProgramme } from "@/lib/club-programme";
@@ -44,6 +46,19 @@ async function readPlayerProfile(name: string, legacyName: string, args: Record<
     return { ...await supabase.rpc(legacyName, args), supportsAttitude: false };
   }
   return { ...result, supportsAttitude: !result.error || result.error.message === "User profile not found." };
+}
+
+// Personal activity can refer to sessions or requests beyond the first Data API page.
+async function allPages<T>(query: { range: (from: number, to: number) =>
+  PromiseLike<{ data: T[] | null; error: { message: string } | null }> }) {
+  const rows: T[] = [];
+  const size = 500;
+  for (let offset = 0; ; offset += size) {
+    const { data, error } = await query.range(offset, offset + size - 1);
+    if (error || !data) return { data: null, error };
+    rows.push(...data);
+    if (data.length < size) return { data: rows, error: null };
+  }
 }
 
 function ModalBackdrop({
@@ -168,6 +183,7 @@ function Button({
 }
 
 function Nav({
+  profileMenu,
   roleTitle,
   isDirector,
   view,
@@ -177,6 +193,7 @@ function Nav({
   unreadChatCount,
   matchCount,
 }: {
+  profileMenu: React.ReactNode;
   view: string;
   setView: (view: string) => void;
   notifications: any[];
@@ -186,23 +203,6 @@ function Nav({
   roleTitle?: string;
   isDirector: boolean;
 }) {
-  const mainMenuItems = [
-    { viewName: "sessions", label: "Calendar", icon: "📅", count: 0 },
-    {
-      viewName: "directory",
-      label: "Players",
-      icon: <PeopleGroupIcon />,
-      count: 0,
-    },
-    {
-      viewName: "chats",
-      label: "Chats",
-      icon: "💬",
-      count: unreadChatCount,
-    },
-    { viewName: "account", label: "Account", icon: "⚙", count: 0 },
-  ];
-
   const goBackOneStep = () => {
     if (window.history.length > 1) {
       window.history.back();
@@ -264,17 +264,10 @@ function Nav({
             />
           </svg>
         </button>
-        <button type="button" className="notification-bell" onClick={() => setView("notifications")}
-          aria-label={`Notifications, ${unreadNotifications.length} unread`} title="Notifications">
-          <span aria-hidden="true">🔔</span>{unreadNotifications.length > 0 && <strong>{unreadNotifications.length}</strong>}
-        </button>
+        <div className="header-account-controls">
         {(roleTitle || isDirector) && (
           <span
             style={{
-              position: "absolute",
-              right: "80px",
-              top: "50%",
-              transform: "translateY(-50%)",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
@@ -293,111 +286,106 @@ function Nav({
             {roleTitle || "Director"}
           </span>
         )}
-      </div>
-
-      <div
-        style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "#f8fafc",
-          borderTop: "1px solid #cbd5e1",
-          padding: "8px 16px 10px",
-          zIndex: 50,
-        }}
-      >
-        <div className="main-menu-grid"
-          style={{
-            width: "100%",
-            maxWidth: "1000px",
-            margin: "0 auto",
-            background: "rgba(255, 255, 255, 0.96)",
-            border: "1px solid #c7d2fe",
-            borderRadius: "24px",
-            boxShadow: "0 10px 35px rgba(15, 23, 42, 0.14)",
-            padding: "8px",
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: "30px",
-          }}
-        >
-          {mainMenuItems.map((item) => {
-            const isActive =
-              view === item.viewName ||
-              (item.viewName === "chats" && view === "chat");
-
-            return (
-              <button
-                key={item.viewName}
-                type="button"
-                onClick={() => setView(item.viewName)}
-                style={{
-                  border: "none",
-                  borderRadius: "18px",
-                  background: isActive ? "#4338ca" : "#e0e7ff",
-                  color: isActive ? "white" : "#3730a3",
-                  padding: "9px 8px",
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "3px",
-                  minHeight: "56px",
-                }}
-              >
-                <span style={{ fontSize: "19px", lineHeight: 1 }}>
-                  {item.icon}
-                </span>
-                <span>
-                  {item.label}
-                  {item.count > 0 ? ` (${item.count})` : ""}
-                </span>
-              </button>
-            );
-          })}
+        <button type="button" className="header-nav-icon" title="Players directory"
+          aria-label="Players directory" aria-current={view === "directory" ? "page" : undefined}
+          onClick={() => setView("directory")}>
+          <PeopleGroupIcon />
+        </button>
+        <button type="button" className="header-nav-icon" title="Chats"
+          aria-label={unreadChatCount ? `Chats, ${unreadChatCount} unread` : "Chats"}
+          aria-current={view === "chat" || view === "chats" ? "page" : undefined}
+          onClick={() => setView("chats")}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
+            <path d="M20.5 11.5a8.5 8.5 0 0 1-12.1 7.7L3 20.5l1.3-5.2a8.5 8.5 0 1 1 16.2-3.8Z" />
+          </svg>
+          {unreadChatCount > 0 && <span aria-hidden="true">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>}
+        </button>
+        <button type="button" className="notification-bell" onClick={() => setView("notifications")}
+          aria-label={`Notifications, ${unreadNotifications.length} unread`} title="Notifications">
+          <span aria-hidden="true">🔔</span>{unreadNotifications.length > 0 && <strong>{unreadNotifications.length}</strong>}
+        </button>
+          {profileMenu}
         </div>
       </div>
+
+      <PersonalMenu view={view} setView={setView} matchCount={matchCount} />
     </>
   );
+}
+
+function HeaderProfileMenu({ initials, photoUrl, openProfile, signOut }: {
+  initials: string;
+  photoUrl: string;
+  openProfile: () => void;
+  signOut: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const container = React.useRef<HTMLDivElement>(null);
+  const trigger = React.useRef<HTMLButtonElement>(null);
+  const [failedPhoto, setFailedPhoto] = useState("");
+  const menuId = React.useId();
+
+  useEffect(() => {
+    if (!open) return;
+    function dismiss(event: PointerEvent) {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [open]);
+
+  return <div className="header-profile-menu" ref={container}
+    onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}
+    onKeyDown={event => {
+      if (event.key === "Escape" && open) {
+        setOpen(false);
+        trigger.current?.focus();
+      }
+    }}>
+    <button ref={trigger} className="header-profile-trigger" type="button" aria-label="Profile menu"
+      aria-expanded={open} aria-controls={menuId} onClick={() => setOpen(!open)}>
+      {photoUrl && photoUrl !== failedPhoto
+        ? <img alt="" width={38} height={38} src={photoUrl} onError={() => setFailedPhoto(photoUrl)} />
+        : initials}
+    </button>
+    <div className="header-profile-options" id={menuId} hidden={!open}>
+      <button type="button" onClick={() => { setOpen(false); openProfile(); }}>My Profile</button>
+      <button type="button" onClick={() => { setOpen(false); signOut(); }}>Sign Out</button>
+    </div>
+  </div>;
 }
 
 function PersonalMenu({
   view,
   setView,
-  unreadNotifications,
-  unreadChatCount,
   matchCount,
   myStandbyCount = 0,
 }: {
   view: string;
   setView: (view: string) => void;
-  unreadNotifications: any[];
-  unreadChatCount: number;
   matchCount: number;
   myStandbyCount?: number;
 }) {
   const personalMenuItems = [
+    { viewName: "sessions", label: "Calendar", count: 0 },
     { viewName: "mySessions", label: "My Sessions", count: 0 },
+    { viewName: "myLooking", label: "Looking", count: 0 },
     {
       viewName: "myStandbys",
       label: "Standbys",
       count: myStandbyCount,
     },
     { viewName: "matches", label: "Matches", count: matchCount },
-    { viewName: "notifications", label: "Alerts", count: unreadNotifications.length },
   ];
 
   return (
     <div
-      className="personal-menu"
+      className="session-navigation-row"
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
-        gap: "30px",
+        gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+        gap: "clamp(3px, 2vw, 24px)",
         margin: "0 auto 18px",
         width: "100%",
         maxWidth: "1000px",
@@ -414,6 +402,7 @@ function PersonalMenu({
 
         return (
           <button
+            aria-current={isActive ? "page" : undefined}
             key={item.viewName}
             type="button"
             onClick={() => setView(item.viewName)}
@@ -852,6 +841,7 @@ function readBrowserRoute(): BrowserRoute {
     };
   }
   if (section === "sessions") {
+    if (identifier === "looking") return { view: "myLooking" };
     if (identifier === "mine") return { view: "mySessions" };
     return {
       view: identifier ? "sessionDetail" : "sessions",
@@ -923,7 +913,9 @@ export default function BridgeBuddy() {
     return supabaseSystems.filter(system => request.wanted_system_ids?.includes(Number(system.system_id))).map(system => system.system_name);
   }
 
+  const refreshSequence = React.useRef(0);
   async function refreshSupabaseData() {
+    const sequence = ++refreshSequence.current;
     const programmeResults = await Promise.all([
       supabase.from("club_programme").select("*"), supabase.from("club_programme_settings").select("*"),
       supabase.from("club_grades").select("*"), supabase.from("player_club_memberships").select("*"),
@@ -934,11 +926,11 @@ export default function BridgeBuddy() {
     if (programmeResults[1].data) setClubSettings(programmeResults[1].data);
     if (programmeResults[2].data) setClubGradeOptions(programmeResults[2].data);
     if (programmeResults[3].data) setClubMemberships(programmeResults[3].data);
-    const { data, error } = await supabase
+    const { data, error } = await allPages(supabase
       .from("session_cards_display")
       .select("*")
       .order("session_date", { ascending: true })
-      .order("start_time", { ascending: true });
+      .order("start_time", { ascending: true }).order("session_instance_id"));
 
     const { data: membersData, error: membersError } = await supabase
       .from("bridgebuddy_players")
@@ -959,20 +951,20 @@ export default function BridgeBuddy() {
       .select("*")
       .order("created_at", { ascending: true });
 
-    const { data: requestRecordData, error: requestRecordError } = await supabase
+    const { data: requestRecordData, error: requestRecordError } = await allPages(supabase
       .from("session_requests")
       .select("request_id, session_instance_id, nz_bridge_number, request_status, wanted_level_ids, wanted_system_ids, created_at")
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true }).order("request_id"));
 
-    const { data: interestsData, error: interestsError } = await supabase
+    const { data: interestsData, error: interestsError } = await allPages(supabase
       .from("interests")
       .select("*")
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true }).order("interest_id"));
 
-    const { data: matchesData, error: matchesError } = await supabase
+    const { data: matchesData, error: matchesError } = await allPages(supabase
       .from("matches")
       .select("*")
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true }).order("match_id"));
 
     const { data: myMatchesData, error: myMatchesError } = await supabase
       .from("my_matches_display")
@@ -990,18 +982,18 @@ export default function BridgeBuddy() {
       .select("*")
       .eq("is_current", true);
 
-    const { data: standbyData, error: standbyError } = await supabase
+    const { data: standbyData, error: standbyError } = await allPages(supabase
       .from("session_standby")
       .select("*")
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true }).order("standby_id"));
 
     const {
       data: tournamentPairRegistrationsData,
       error: tournamentPairRegistrationsError,
-    } = await supabase
+    } = await allPages(supabase
       .from("tournament_pair_registrations")
       .select("*")
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true }).order("registration_id"));
 
     if (error) console.error("Supabase sessions error:", error);
     if (membersError) console.error("Supabase members error:", membersError);
@@ -1022,6 +1014,7 @@ export default function BridgeBuddy() {
       );
     }
     const { data: staffData, error: staffError } = await supabase.rpc("get_staff_profiles");
+    if (sequence !== refreshSequence.current) return;
     if (staffError) console.error("Load Admin/Director profiles:", staffError.message);
     else setStaffProfiles(Object.fromEntries((staffData || []).map((profile: any) => [String(profile.nz_bridge_number), profile])));
     if (membersData) setSupabaseMembers(membersData);
@@ -2261,7 +2254,7 @@ React.useEffect(() => {
     // Restore the session after the calendar cards have mounted again.
     if (
       restoreCalendarPosition &&
-      (route.view === "sessions" || route.view === "mySessions") &&
+      (route.view === "sessions" || route.view === "mySessions" || route.view === "myLooking") &&
       selectedSessionId
     ) {
       setScrollToSessionId(selectedSessionId);
@@ -2370,6 +2363,8 @@ React.useEffect(() => {
       nextUrl = `${routePrefix}/sessions`;
     } else if (view === "mySessions") {
       nextUrl = "/sessions/mine";
+    } else if (view === "myLooking") {
+      nextUrl = "/sessions/looking";
     } else if (view === "myStandbys") {
       nextUrl = "/standbys";
     } else if (view === "matches") {
@@ -2640,7 +2635,7 @@ React.useEffect(() => {
   }
 
   React.useEffect(() => {
-    if ((view !== "sessions" && view !== "mySessions") || !scrollToSessionId) return;
+    if ((view !== "sessions" && view !== "mySessions" && view !== "myLooking") || !scrollToSessionId) return;
 
     const sessionIdToHighlight = scrollToSessionId;
 
@@ -2668,7 +2663,7 @@ React.useEffect(() => {
 
   function navigateFromSessionDetail(nextView: string) {
     if (
-      (nextView === "sessions" || nextView === "mySessions") &&
+      (nextView === "sessions" || nextView === "mySessions" || nextView === "myLooking") &&
       selectedSessionId
     ) {
       setScrollToSessionId(selectedSessionId);
@@ -2986,9 +2981,10 @@ React.useEffect(() => {
         new Date(a.lastMessage?.created_at || 0).getTime()
     );
 
-    const [matchFilters, setMatchFilters] = useState<string[]>(["matched"]);
+    const [matchFilters, setMatchFilters] = useState<string[]>(["matched", "cancelled"]);
     const [matchSort, setMatchSort] = useState("date");
-    const calendarView = view === "sessions" || view === "mySessions" ? view : "";
+    const personalCalendar = view === "mySessions" || view === "myLooking";
+    const calendarView = view === "sessions" ? view : "";
     const calendarPrefs = useCalendarPreferences(calendarUser, currentMember?.nz_bridge_number, calendarView);
     const [sessionDateFilter, setSessionDateFilter] = useState("");
     useEffect(() => {
@@ -3000,39 +2996,14 @@ React.useEffect(() => {
 
     const activeMatchFilters = matchFilters;
 
-    const myMatches = supabaseMatches.filter(
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Pacific/Auckland" });
+    const myMatches = calendarUser && currentMember?.nz_bridge_number ? supabaseMatches.filter(
       (match: any) =>
         String(match.requester_nz_bridge_number) === String(currentMember?.nz_bridge_number) ||
         String(match.partner_nz_bridge_number) === String(currentMember?.nz_bridge_number)
-    );
+    ) : [];
 
-    const uniqueMatches = myMatches.filter(
-      (match: any, index: number, array: any[]) =>
-        index ===
-        array.findIndex((item: any) => {
-          const matchPlayers = [
-            match.requester_nz_bridge_number,
-            match.partner_nz_bridge_number,
-          ]
-            .sort()
-            .join("-");
-
-          const itemPlayers = [
-            item.requester_nz_bridge_number,
-            item.partner_nz_bridge_number,
-          ]
-            .sort()
-            .join("-");
-
-          return (
-            String(item.session_instance_id) === String(match.session_instance_id) &&
-            itemPlayers === matchPlayers &&
-            item.match_status === match.match_status
-          );
-        })
-    );
-
-    const filteredMatches = uniqueMatches.filter((match: any) => {
+    const filteredMatches = myMatches.filter((match: any) => {
     const session = supabaseSessions.find(
       (session: any) =>
         String(session.session_instance_id) === String(match.session_instance_id)
@@ -3040,11 +3011,7 @@ React.useEffect(() => {
 
     if (!session) return false;
 
-    const sessionDate = new Date(session?.session_date + "T00:00:00");
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const isPast = sessionDate < today;
+    const isPast = session.session_date < today;
 
     if (
       activeMatchFilters.includes("matched") &&
@@ -3143,6 +3110,9 @@ React.useEffect(() => {
         String(session.session_instance_id) === String(b.session_instance_id)
     );
 
+    const pastCompare = Number(aSession?.session_date < today) - Number(bSession?.session_date < today);
+    if (pastCompare) return pastCompare;
+
     const dateTimeCompare =
       new Date(`${aSession?.session_date || "1900-01-01"}T${aSession?.start_time || "00:00:00"}`).getTime() -
       new Date(`${bSession?.session_date || "1900-01-01"}T${bSession?.start_time || "00:00:00"}`).getTime();
@@ -3168,7 +3138,9 @@ React.useEffect(() => {
   const [standbyUpdateProfile, setStandbyUpdateProfile] = useState(true);
   const [standbyNote, setStandbyNote] = useState("");
   const [currentStandbyRecord, setCurrentStandbyRecord] = useState<any>(null);
-  const [myStandbySessions, setMyStandbySessions] = useState<any[]>([]);
+  const myStandbySessions = useMemo(() => calendarUser && currentMember?.nz_bridge_number
+    ? supabaseStandby.filter(row => String(row.nz_bridge_number) === String(currentMember.nz_bridge_number))
+    : [], [calendarUser, currentMember?.nz_bridge_number, supabaseStandby]);
   const [cancellingStandbySessionId, setCancellingStandbySessionId] = useState<string | null>(null);
   const [standbyCancellationError, setStandbyCancellationError] = useState("");
   const [directorStandbyList, setDirectorStandbyList] = useState<any[]>([]);
@@ -3199,7 +3171,6 @@ React.useEffect(() => {
           p_nz_bridge_number: Number(currentMember.nz_bridge_number),
         });
         if (error || data !== true) throw new Error(error?.message || "Standby could not be cancelled.");
-        setMyStandbySessions(records => records.filter(record => Number(record.standby_id) !== standbyId));
       }
     } catch (error) {
       setStandbyCancellationError(error instanceof Error ? error.message : "Standby could not be cancelled.");
@@ -3389,33 +3360,6 @@ React.useEffect(() => {
     isCurrentUserDirector,
   ]);
 
-  React.useEffect(() => {
-    async function loadMyStandbySessions() {
-      if (!currentMember?.nz_bridge_number) {
-        setMyStandbySessions([]);
-        return;
-      }
-
-      const { data: standbySessionsData, error: standbySessionsError } =
-        await supabase.rpc("get_player_standby_sessions", {
-          p_nz_bridge_number: Number(currentMember.nz_bridge_number),
-        });
-
-      if (standbySessionsError) {
-        console.error(
-          "Get player standby sessions error:",
-          JSON.stringify(standbySessionsError, null, 2)
-        );
-        setMyStandbySessions([]);
-        return;
-      }
-
-      setMyStandbySessions(standbySessionsData || []);
-    }
-
-    loadMyStandbySessions();
-  }, [currentMember, supabaseStandby]);
-
     React.useEffect(() => {
     async function loadDirectorStandbyList() {
       if (
@@ -3494,78 +3438,42 @@ React.useEffect(() => {
     loadCurrentStandbyRecord();
   }, [view, selectedSessionId, currentMember]);
 
-  function isMyCalendarSession(session: any) {
-    const currentMemberNumber = currentMember?.nz_bridge_number
-      ? String(currentMember.nz_bridge_number)
-      : "";
-
-    if (!currentMemberNumber) return false;
-
-    const hasActiveMatch = supabaseMatches.some(
-      (match: any) =>
-        String(match.session_instance_id) === String(session.session_instance_id) &&
-        String(match.match_status).trim() === "Active" &&
-        (
-          String(match.requester_nz_bridge_number) === currentMemberNumber ||
-          String(match.partner_nz_bridge_number) === currentMemberNumber
-        )
-    );
-
-    const hasOpenRequest = supabaseRequestRecords.some(
-      (request: any) =>
-        String(request.session_instance_id) === String(session.session_instance_id) &&
-        String(request.nz_bridge_number) === currentMemberNumber &&
-        String(request.request_status).trim() === "Open"
-    );
-
-    const hasPendingInterest = supabaseInterests.some((interest: any) => {
-      if (
-        String(interest.interested_nz_bridge_number) !== currentMemberNumber ||
-        String(interest.interest_status).trim() !== "Pending"
-      ) {
-        return false;
+  const personalActivity = useMemo(() => {
+    const sessions = new Map<string, { overview: Set<string>; looking: Set<string> }>();
+    const owner = currentMember?.nz_bridge_number;
+    if (!calendarUser || !owner) return sessions;
+    const mine = (number: unknown) => String(number) === String(owner);
+    function add(sessionId: unknown, label: string, looking = false) {
+      if (sessionId == null) return;
+      const key = String(sessionId);
+      const activity = sessions.get(key) ?? { overview: new Set<string>(), looking: new Set<string>() };
+      activity.overview.add(label);
+      if (looking) activity.looking.add(label);
+      sessions.set(key, activity);
+    }
+    const requests = new Map(supabaseRequestRecords.map(row => [String(row.request_id), row]));
+    for (const row of supabaseRequestRecords) {
+      if (mine(row.nz_bridge_number)) add(row.session_instance_id,
+        row.request_status === "Open" ? "Looking for a partner" : `Request · ${row.request_status}`, row.request_status === "Open");
+    }
+    for (const row of supabaseInterests) {
+      if (mine(row.interested_nz_bridge_number)) {
+        const request = requests.get(String(row.request_id));
+        add(request?.session_instance_id, `Interest · ${row.interest_status}`, true);
       }
-
-      const requestForInterest = supabaseRequestRecords.find(
-        (request: any) => Number(request.request_id) === Number(interest.request_id)
-      );
-
-      return (
-        requestForInterest &&
-        String(requestForInterest.session_instance_id) === String(session.session_instance_id) &&
-        String(requestForInterest.request_status).trim() === "Open"
-      );
-    });
-
-    const hasActiveStandby = myStandbySessions.some(
-      (standbySession: any) =>
-        String(standbySession.session_instance_id) ===
-        String(session.session_instance_id) &&
-        String(standbySession.standby_status).trim() === "Available"
-    );
-
-    const hasTournamentRegistration = supabaseTournamentPairRegistrations.some(
-      (registration: any) =>
-        String(registration.session_instance_id) ===
-          String(session.session_instance_id) &&
-        String(registration.registration_status).trim() === "Registered" &&
-        [
-          registration.registering_nz_bridge_number,
-          registration.partner_nz_bridge_number,
-          registration.manual_partner_nz_bridge_number,
-        ].some(
-          (playerNumber) => String(playerNumber) === currentMemberNumber
-        )
-    );
-
-    return (
-      hasActiveMatch ||
-      hasOpenRequest ||
-      hasPendingInterest ||
-      hasActiveStandby ||
-      hasTournamentRegistration
-    );
-  }
+    }
+    for (const row of myStandbySessions) add(row.session_instance_id, `Standby · ${row.standby_status}`);
+    for (const row of supabaseMatches) {
+      if (mine(row.requester_nz_bridge_number) || mine(row.partner_nz_bridge_number))
+        add(row.session_instance_id, row.match_status === "Active" ? "Match confirmed" : `Match · ${row.match_status}`);
+    }
+    for (const row of supabaseTournamentPairRegistrations) {
+      if ([row.registering_nz_bridge_number, row.partner_nz_bridge_number, row.manual_partner_nz_bridge_number].some(mine))
+        add(row.session_instance_id, `Registration · ${row.registration_status}`);
+    }
+    return sessions;
+  }, [calendarUser, currentMember?.nz_bridge_number, supabaseRequestRecords, supabaseInterests,
+    myStandbySessions, supabaseMatches, supabaseTournamentPairRegistrations]);
 
   const calendarRows = useMemo(() => {
     const programmeEvents = clubProgramme.filter(p => !p.partner_search_enabled).map(p => ({
@@ -3586,13 +3494,11 @@ React.useEffect(() => {
   const sessionClubOptions = [...new Map(calendarRows.filter(r => r.clubId).map(r => [
     r.clubId, { id: r.clubId, name: r.clubName || supabaseMembers.find(m => String(m.club_id) === r.clubId)?.club_name || `Club ${r.clubId}` },
   ] as const)).values()].sort((a,b) => a.name.localeCompare(b.name));
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Pacific/Auckland" });
-  const eligibleRows = view === "mySessions" ? calendarRows.filter(r => isMyCalendarSession(r.session)) : calendarRows;
   const linkedRow = calendarLinkedSessionId ? calendarRows.find(r => String(r.session.session_instance_id) === calendarLinkedSessionId) : undefined;
   const activeType = linkedRow?.type || calendarPrefs.preferences.last_type;
   const selection = calendarPrefs.preferences.filters[activeType];
   const preferredClub = linkedRow?.clubId || selection?.club || (activeType === "Clubs" && currentMember?.club_id ? String(currentMember.club_id) : "all");
-  const typeRows = eligibleRows.filter(r => r.type === activeType);
+  const typeRows = calendarRows.filter(r => r.type === activeType);
   const availableClubs = sessionClubOptions.filter(c => typeRows.some(r => r.clubId === c.id));
   const sessionClubFilter = availableClubs.some(c => c.id === preferredClub) ? preferredClub : "all";
   const scope = typeRows.filter(r => sessionClubFilter === "all" || r.clubId === sessionClubFilter);
@@ -3600,9 +3506,15 @@ React.useEffect(() => {
   const dayOptions = weekdays.filter(d => scope.some(r => r.day === d));
   const savedDays = selection?.days ?? (selection?.day ? [selection.day] : []);
   const selectedDays = linkedRow ? [] : dayOptions.filter(day => savedDays.includes(day));
-  const filteredSessions = scope.filter(r => (!selectedDays.length || selectedDays.includes(r.day)) &&
-    (sessionDateFilter ? r.session.session_date === sessionDateFilter : r.session.session_date >= today || r === linkedRow)).map(r => r.session)
+  const activityTab = view === "myLooking" ? "looking" : "overview";
+  const visibleRows = personalCalendar
+    ? calendarRows.filter(row => personalActivity.get(String(row.session.session_instance_id))?.[activityTab].size)
+    : scope.filter(row =>
+        (!selectedDays.length || selectedDays.includes(row.day)) &&
+        (sessionDateFilter ? row.session.session_date === sessionDateFilter : row.session.session_date >= today || row === linkedRow));
+  const filteredSessions = visibleRows.map(row => row.session)
     .sort((a: any, b: any) => {
+      if (personalCalendar && (a.session_date < today) !== (b.session_date < today)) return a.session_date < today ? 1 : -1;
       const dateCompare =
         new Date(a.session_date).getTime() - new Date(b.session_date).getTime();
 
@@ -4004,6 +3916,10 @@ React.useEffect(() => {
     }
   }
 
+  const profileMenu = currentMember && <HeaderProfileMenu initials={getMemberInitials(currentMember)}
+    photoUrl={getAvatarPhotoUrl(accountProfile.avatarPhotoPath)}
+    openProfile={() => setView("account")} signOut={switchAccount} />;
+
   if (view === "account") {
     const accountInitials = `${currentMember?.first_name?.[0] || ""}${
       currentMember?.last_name?.[0] || ""
@@ -4037,6 +3953,7 @@ React.useEffect(() => {
         <div style={styles.container}>
           <div style={styles.stickyHeader}>
           <Nav
+            profileMenu={profileMenu}
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             isDirector={isCurrentUserDirector}
             view={view}
@@ -4046,16 +3963,6 @@ React.useEffect(() => {
             unreadChatCount={unreadChatCount}
             matchCount={filteredMatches.length}
           />
-
-          {!isCurrentUserDirector && (
-            <PersonalMenu
-              view={view}
-              setView={setView}
-              unreadNotifications={unreadNotifications}
-              unreadChatCount={unreadChatCount}
-              matchCount={filteredMatches.length}
-            />
-          )}
           </div>
 
           <Card>
@@ -4747,7 +4654,7 @@ React.useEffect(() => {
     );
   }
 
-  if (view === "sessions" || view === "mySessions") {
+  if (view === "sessions" || personalCalendar) {
     return (
       <main className="calendar-page" style={styles.page}>
         <div style={styles.container}>
@@ -4756,6 +4663,7 @@ React.useEffect(() => {
             style={styles.stickyHeader}
           >
           <Nav
+            profileMenu={profileMenu}
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             isDirector={isCurrentUserDirector}
             view={view}
@@ -4766,17 +4674,7 @@ React.useEffect(() => {
             matchCount={filteredMatches.length}
           />
 
-
-          {!isCurrentUserDirector && (
-            <PersonalMenu
-              view={view}
-              setView={setView}
-              unreadNotifications={unreadNotifications}
-              unreadChatCount={unreadChatCount}
-              matchCount={filteredMatches.length}
-            />
-          )}
-
+      {!personalCalendar && <>
       <div className="session-filter-strip" aria-label="Session filters">
         <select aria-label="Session Type" disabled={calendarPrefs.loading} value={activeType} onChange={e => {
           setCalendarLinkedSessionId(null);
@@ -4806,23 +4704,25 @@ React.useEffect(() => {
         </div>
       </div>
       {calendarPrefs.error && <p role="status">{calendarPrefs.error}</p>}
+      </>}
           </div>
 
-        {sessionClubOptions.filter(club => club.id === sessionClubFilter).map(club => <CalendarLegend key={club.id} clubName={club.name} legend={clubSettings.find(c => String(c.club_id) === club.id)?.session_legend} />)}
+        {!personalCalendar && sessionClubOptions.filter(club => club.id === sessionClubFilter).map(club => <CalendarLegend key={club.id} clubName={club.name} legend={clubSettings.find(c => String(c.club_id) === club.id)?.session_legend} />)}
 
           {clubProgrammeError && <p role="alert">{clubProgrammeError}</p>}
           {filteredSessions.length === 0 && (
             <Card>
               <p style={styles.text}>
-                {view === "mySessions"
-                  ? "None of your sessions match the selected filters."
+                {personalCalendar && !calendarUser ? "Sign in to see your personal session activity." : view === "mySessions"
+                  ? "You have no session activity yet."
+                  : view === "myLooking" ? "You have no looking requests or expressed interests."
                   : "No sessions match the selected filters."}
               </p>
             </Card>
           )}
 
           {filteredSessions.map((session: any) => {
-            const allClubs = sessionClubFilter === "all";
+            const allClubs = personalCalendar || sessionClubFilter === "all";
             const organiser = session.club_name || session.clubs
               || clubSettings.find(c => String(c.club_id) === String(session.club_id))?.club_name
               || supabaseMembers.find(member => String(member.club_id) === String(session.club_id))?.club_name;
@@ -4940,8 +4840,9 @@ React.useEffect(() => {
                     "Available"
               );
 
-            const currentMemberCardStatus =
-              currentMemberTournamentRegistrationForSession
+            const currentMemberCardStatus = personalCalendar
+              ? [...(personalActivity.get(String(session.session_instance_id))?.[activityTab] ?? [])].join(" · ")
+              : currentMemberTournamentRegistrationForSession
                 ? "You are registered"
                 : currentMemberMatchForSession
                   ? "You are matched"
@@ -4969,7 +4870,7 @@ React.useEffect(() => {
                 id={`session-card-${session.session_instance_id}`}
                 highlighted={highlightedSessionId === session.session_instance_id}
                 personalStatus={
-                  view === "mySessions"
+                  personalCalendar
                     ? null
                     : personalSessionStatus ||
                       myStandbySessions.some(
@@ -4993,7 +4894,7 @@ React.useEffect(() => {
                       )
                   );
 
-                  setSessionReturnView(view === "mySessions" ? "mySessions" : "sessions");
+                  setSessionReturnView(view);
                   setSelectedSessionId(session.session_instance_id);
                   setSessionDetailFilter("Active");
                   setTournamentDetailFilter(
@@ -5022,9 +4923,7 @@ React.useEffect(() => {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      setSessionReturnView(
-                        view === "mySessions" ? "mySessions" : "sessions"
-                      );
+                      setSessionReturnView(view);
                       setSelectedSessionId(session.session_instance_id);
                       setSessionDetailFilter("Active");
                       setTournamentDetailFilter(
@@ -5219,9 +5118,7 @@ React.useEffect(() => {
                           tab: string
                         ) => {
                           event.stopPropagation();
-                          setSessionReturnView(
-                            view === "mySessions" ? "mySessions" : "sessions"
-                          );
+                          setSessionReturnView(view);
                           setSelectedSessionId(session.session_instance_id);
                           setTournamentDetailFilter(tab);
                           setView("tournamentDetail");
@@ -5394,9 +5291,7 @@ React.useEffect(() => {
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            setSessionReturnView(
-                              view === "mySessions" ? "mySessions" : "sessions"
-                            );
+                            setSessionReturnView(view);
                             setSelectedSessionId(session.session_instance_id);
                             setSessionDetailFilter("Looking");
                             setView("sessionDetail");
@@ -5434,7 +5329,7 @@ React.useEffect(() => {
                         fontSize: "12px",
                         fontWeight: 700,
                         marginTop: "11px",
-                        whiteSpace: "nowrap",
+                        whiteSpace: personalCalendar ? "normal" : "nowrap",
                       }}
                     >
                       {currentMemberCardStatus}
@@ -6911,6 +6806,7 @@ React.useEffect(() => {
         <div style={styles.container}>
           <div style={styles.stickyHeader}>
           <Nav
+            profileMenu={profileMenu}
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             isDirector={isCurrentUserDirector}
             view={view}
@@ -6920,16 +6816,6 @@ React.useEffect(() => {
             unreadChatCount={unreadChatCount}
             matchCount={filteredMatches.length}
           />
-
-          {!isCurrentUserDirector && (
-            <PersonalMenu
-              view={view}
-              setView={navigateFromSessionDetail}
-              unreadNotifications={unreadNotifications}
-              unreadChatCount={unreadChatCount}
-              matchCount={filteredMatches.length}
-            />
-          )}
 
           <div style={styles.detailTabBar}>
           {(isCurrentUserDirector
@@ -9687,6 +9573,7 @@ React.useEffect(() => {
         <div style={styles.container}>
           <div style={styles.stickyHeader}>
           <Nav
+            profileMenu={profileMenu}
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             isDirector={isCurrentUserDirector}
             view={view}
@@ -9696,16 +9583,6 @@ React.useEffect(() => {
             unreadChatCount={unreadChatCount}
             matchCount={filteredMatches.length}
           />
-
-          {!isCurrentUserDirector && (
-            <PersonalMenu
-              view={view}
-              setView={navigateFromSessionDetail}
-              unreadNotifications={unreadNotifications}
-              unreadChatCount={unreadChatCount}
-              matchCount={filteredMatches.length}
-            />
-          )}
 
           <div style={styles.detailTabBar}>
             {(isCurrentUserDirector
@@ -12291,7 +12168,7 @@ React.useEffect(() => {
     const activeMyStandbys = myStandbySessions
       .filter(
         (standbySession: any) =>
-          String(standbySession.standby_status).trim() === "Available"
+          ["Available", "Assigned"].includes(standbySession.standby_status)
       )
       .map((standbySession: any) => {
         const session = supabaseSessions.find(
@@ -12306,29 +12183,20 @@ React.useEffect(() => {
         };
       })
       .filter((standbySession: any) => standbySession.session)
-      .filter((standbySession: any) => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        return new Date(standbySession.session.session_date + "T00:00:00") >= today;
-      })
       .filter((standbySession: any, index: number, records: any[]) =>
         index === records.findIndex(record =>
           String(record.session_instance_id) === String(standbySession.session_instance_id)))
-      .sort(
-        (a: any, b: any) =>
-          new Date(
-            `${a.session.session_date}T${a.session.start_time || "00:00:00"}`
-          ).getTime() -
-          new Date(
-            `${b.session.session_date}T${b.session.start_time || "00:00:00"}`
-          ).getTime()
-      );
+      .sort((a, b) =>
+        Number(a.session.session_date < today) - Number(b.session.session_date < today) ||
+        a.session.session_date.localeCompare(b.session.session_date) ||
+        String(a.session.start_time || "").localeCompare(String(b.session.start_time || "")));
 
     return (
       <main style={styles.page}>
         <div style={styles.container}>
           <div style={styles.stickyHeader}>
           <Nav
+            profileMenu={profileMenu}
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             isDirector={isCurrentUserDirector}
             view={view}
@@ -12338,16 +12206,6 @@ React.useEffect(() => {
             unreadChatCount={unreadChatCount}
             matchCount={filteredMatches.length}
           />
-
-          {!isCurrentUserDirector && (
-            <PersonalMenu
-              view={view}
-              setView={setView}
-              unreadNotifications={unreadNotifications}
-              unreadChatCount={unreadChatCount}
-              matchCount={filteredMatches.length}
-            />
-          )}
           </div>
 
           <h1 style={styles.sectionTitle}>Standbys</h1>
@@ -12356,15 +12214,14 @@ React.useEffect(() => {
           {activeMyStandbys.length === 0 && (
             <Card>
               <p style={styles.text}>
-                You are not currently registered as standby for any upcoming
-                sessions.
+                You have no standby registrations.
               </p>
             </Card>
           )}
 
           {activeMyStandbys.map((standbySession: any) => (
             <div key={`my-standby-${standbySession.session_instance_id}`}
-              style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: "16px", alignItems: "center", marginBottom: "16px" }}>
+              className="personal-activity-row">
             <Card
             >
               <div>
@@ -12422,14 +12279,14 @@ React.useEffect(() => {
                   marginTop: "6px",
                 }}
               >
-                Standby status: <strong>Available</strong>
+                Standby status: <strong>{standbySession.standby_status}</strong>
               </div>
             </Card>
-            <button type="button" style={styles.compactSecondaryAction}
+            {standbySession.standby_status === "Available" && standbySession.session.session_date >= today && <button type="button" style={styles.compactSecondaryAction}
               disabled={cancellingStandbySessionId !== null}
               onClick={() => cancelListedStandby(standbySession)}>
               {cancellingStandbySessionId === String(standbySession.session_instance_id) ? "Cancelling..." : "Cancel Standby"}
-            </button>
+            </button>}
             </div>
           ))}
         </div>
@@ -12443,6 +12300,7 @@ React.useEffect(() => {
         <div style={styles.container}>
           <div style={styles.stickyHeader}>
           <Nav
+            profileMenu={profileMenu}
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             isDirector={isCurrentUserDirector}
             view={view}
@@ -12453,17 +12311,7 @@ React.useEffect(() => {
             matchCount={filteredMatches.length}
           />
 
-          {!isCurrentUserDirector && (
-            <PersonalMenu
-              view={view}
-              setView={setView}
-              unreadNotifications={unreadNotifications}
-              unreadChatCount={unreadChatCount}
-              matchCount={filteredMatches.length}
-            />
-          )}
-
-          <div
+          <div className="personal-match-controls"
             style={{
               display: "flex",
               alignItems: "flex-start",
@@ -12584,13 +12432,7 @@ React.useEffect(() => {
             return (
               <div
                 key={`${match.match_id}-${match.requester_nz_bridge_number}-${match.partner_nz_bridge_number}-${match.session_instance_id}-${index}`}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 180px",
-                    gap: "16px",
-                    alignItems: "center",
-                    marginBottom: "16px",
-                  }}
+                className="personal-activity-row"
               >
                 <Card>
                   <div
@@ -12661,11 +12503,11 @@ React.useEffect(() => {
                         color: "#0f172a",
                         fontWeight: 400,
                         fontSize: "15px",
-                        whiteSpace: "nowrap",
+                        overflowWrap: "anywhere",
                         textAlign: "right",
                       }}
                     >
-                      Matched with{" "}
+                      {match.match_status === "Cancelled" ? "Cancelled partnership with" : "Matched with"}{" "}
                       <span
                         style={{
                           color: partner ? "#4338ca" : "#0f172a",
@@ -12688,7 +12530,7 @@ React.useEffect(() => {
 
                   <div>
                     {match.match_status === "Active" &&
-                      new Date(session?.session_date + "T00:00:00") >= new Date(new Date().setHours(0, 0, 0, 0)) && (
+                      session?.session_date >= today && (
                       <button
                         style={styles.matchButton}
                         onClick={(e) => {
@@ -12835,6 +12677,7 @@ React.useEffect(() => {
       <div style={styles.container}>
           <div style={styles.stickyHeader}>
           <Nav
+            profileMenu={profileMenu}
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             isDirector={isCurrentUserDirector}
             view={view}
@@ -12844,16 +12687,6 @@ React.useEffect(() => {
             unreadChatCount={unreadChatCount}
             matchCount={filteredMatches.length}
           />
-
-          {!isCurrentUserDirector && (
-            <PersonalMenu
-              view={view}
-              setView={setView}
-              unreadNotifications={unreadNotifications}
-              unreadChatCount={unreadChatCount}
-              matchCount={filteredMatches.length}
-            />
-          )}
           </div>
 
             <div style={{ marginTop: "8px" }}></div>
@@ -13142,6 +12975,7 @@ React.useEffect(() => {
         <div style={styles.container}>
           <div style={styles.stickyHeader}>
           <Nav
+            profileMenu={profileMenu}
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             isDirector={isCurrentUserDirector}
             view={view}
@@ -13151,16 +12985,6 @@ React.useEffect(() => {
             unreadChatCount={unreadChatCount}
             matchCount={filteredMatches.length}
           />
-
-          {!isCurrentUserDirector && (
-            <PersonalMenu
-              view={view}
-              setView={setView}
-              unreadNotifications={unreadNotifications}
-              unreadChatCount={unreadChatCount}
-              matchCount={filteredMatches.length}
-            />
-          )}
           </div>
 
           {chatListItems.length === 0 && (
@@ -13340,6 +13164,7 @@ React.useEffect(() => {
         <div style={styles.container}>
           <div style={styles.stickyHeader}>
           <Nav
+            profileMenu={profileMenu}
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             isDirector={isCurrentUserDirector}
             view={view}
@@ -13349,16 +13174,6 @@ React.useEffect(() => {
             unreadChatCount={unreadChatCount}
             matchCount={filteredMatches.length}
           />
-
-          {!isCurrentUserDirector && (
-            <PersonalMenu
-              view={view}
-              setView={setView}
-              unreadNotifications={unreadNotifications}
-              unreadChatCount={unreadChatCount}
-              matchCount={filteredMatches.length}
-            />
-          )}
           </div>
 
           <Card>
@@ -13912,6 +13727,7 @@ React.useEffect(() => {
         <div style={styles.container}>
           <div style={styles.stickyHeader}>
           <Nav
+            profileMenu={profileMenu}
             roleTitle={isCurrentUserStaff ? accountStaffProfile.role_title : undefined}
             isDirector={isCurrentUserDirector}
             view={view}
@@ -13921,16 +13737,6 @@ React.useEffect(() => {
             unreadChatCount={unreadChatCount}
             matchCount={filteredMatches.length}
           />
-
-          {!isCurrentUserDirector && (
-            <PersonalMenu
-              view={view}
-              setView={setView}
-              unreadNotifications={unreadNotifications}
-              unreadChatCount={unreadChatCount}
-              matchCount={filteredMatches.length}
-            />
-          )}
 
           <div style={styles.directorySearchBar}>
             <label style={styles.directorySearchField}>
@@ -14064,7 +13870,7 @@ React.useEffect(() => {
 
                     <div style={styles.directoryPlayerSummary}>
                       <div className="directory-name-actions">
-                        <button type="button" className="directory-name-button" style={directoryStaffProfile?.role_title ? { ...styles.directoryPlayerName, color: "#dc2626" } : styles.directoryPlayerName}
+                        <button type="button" className="directory-name-button" style={styles.directoryPlayerName}
                           onClick={() => setProfileToView(playerIdentity)}>
                         {playerIdentity.first_name} {playerIdentity.last_name}
                         {directoryStaffProfile?.role_title && <span style={{ color: "#dc2626", fontWeight: 600 }}>
@@ -14872,7 +14678,7 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: "100vh",
     background: "#f8fafc",
     color: "#0f172a",
-    padding: "24px 24px 120px",
+    padding: "24px",
     fontFamily: "Arial, sans-serif",
   },
   container: {

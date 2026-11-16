@@ -223,7 +223,7 @@ body {
 /* Compact calendar layout for phone-sized viewports; tablets keep the legend. */
 @media (max-width: 767px) {
   .calendar-page {
-    padding: 8px 12px 96px !important;
+    padding: 8px 12px !important;
   }
 
   .calendar-page .calendar-navigation {
@@ -250,11 +250,6 @@ body {
     padding: 0 !important;
   }
 
-  .calendar-page .personal-menu {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 8px !important;
-    margin-bottom: 8px !important;
-  }
 
   .calendar-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -469,16 +464,6 @@ body {
 }
 .profile-photo-dialog::backdrop { background: #18253866; }
 .profile-photo-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-@media (max-width: 600px) {
-  .profile-page .personal-menu, .profile-page .main-menu-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    gap: 3px !important;
-  }
-  .profile-page .personal-menu button, .profile-page .main-menu-grid button {
-    padding-inline: 2px !important;
-    white-space: normal !important;
-  }
-}
 .directory-player-row { position: relative; }
 .directory-name-actions, .directory-list-controls { display: flex; align-items: center; gap: 4px; }
 .directory-list-controls { align-items: end; gap: 8px; }
@@ -560,4 +545,16 @@ form + .home-screen-install button { width: 100%; font-weight: 700; }
     font-size: 13px !important;
     line-height: 1.15;
   }
+}
+
+.personal-activity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 180px);
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 767px) {
+  .personal-activity-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .personal-match-controls { flex-wrap: wrap; gap: 4px !important; }
 }
