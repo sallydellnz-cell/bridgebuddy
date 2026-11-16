@@ -4015,7 +4015,6 @@ React.useEffect(() => {
               )}
             </div>
 
-            {homeScreenInstall}
             <div style={styles.accountGrid}>
               {isAccountEditing && (
                 <div style={styles.accountAvatarField}>
@@ -4775,6 +4774,7 @@ React.useEffect(() => {
               </p>
             )}
           </Card>
+          {homeScreenInstall}
 
         </div>
       </main>
@@ -4800,7 +4800,6 @@ React.useEffect(() => {
             matchCount={filteredMatches.length}
           />
 
-          {homeScreenInstall}
 
           {!isCurrentUserDirector && (
             <PersonalMenu
@@ -5688,6 +5687,7 @@ React.useEffect(() => {
               );
             })}
 
+          {homeScreenInstall}
           <div style={{ height: "40px" }} />
         </div>
 
@@ -14526,7 +14526,6 @@ React.useEffect(() => {
             <div style={styles.landingBrandName}>BRIDGE BUDDY</div>
           </div>
 
-          {homeScreenInstall}
 
           <form
             style={styles.landingLoginForm}
@@ -14702,6 +14701,7 @@ React.useEffect(() => {
             Find a bridge partner for a club or online session or register for a
             tournament.
           </p>
+          {homeScreenInstall}
         </div>
       </section>
     </main>

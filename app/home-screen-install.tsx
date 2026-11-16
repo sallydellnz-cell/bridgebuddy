@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type InstallPrompt = Event & {
   prompt(): Promise<void>;
@@ -12,6 +12,11 @@ export function useHomeScreenInstall() {
   const [standalone, setStandalone] = useState(false);
   const [offer, setOffer] = useState<InstallPrompt | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+
+  const help = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (showHelp) help.current?.scrollIntoView({ block: "nearest" });
+  }, [showHelp]);
 
   useEffect(() => {
     const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -43,7 +48,7 @@ export function useHomeScreenInstall() {
     };
   }, []);
 
-  if (!platform || standalone) return null;
+  if (!platform || platform === "desktop" || standalone) return null;
   async function install() {
     if (!offer) { setShowHelp(open => !open); return; }
     setOffer(null);
@@ -54,9 +59,8 @@ export function useHomeScreenInstall() {
   }
 
   return <div className="home-screen-install">
-    <button type="button" onClick={install} aria-expanded={offer ? undefined : showHelp}>{platform === "desktop" ? "Install on your phone" : "Add to Home Screen"}</button>
-    {showHelp && platform === "desktop" && <p>Open bridgebuddy.co.nz on your phone. On iPhone, use Safari’s Share menu and choose Add to Home Screen. On Android, use Chrome’s menu and choose Add to Home screen.</p>}
-    {showHelp && platform !== "desktop" && <p>{platform === "ios"
+    <button type="button" onClick={install} aria-expanded={offer ? undefined : showHelp}>{offer ? "Install BridgeBuddy" : "How to add to Home Screen"}</button>
+    {showHelp && <p ref={help} role="status">{platform === "ios"
       ? "In Safari, tap Share, then Add to Home Screen. If offered, turn on Open as Web App, then tap Add."
       : "In Chrome, open the ⋮ menu, tap Add to Home screen, then choose Install or Create shortcut."}</p>}
   </div>;
