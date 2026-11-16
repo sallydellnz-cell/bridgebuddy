@@ -4676,14 +4676,19 @@ React.useEffect(() => {
 
       {!personalCalendar && <>
       <div className="session-filter-strip" aria-label="Session filters">
-        <select aria-label="Session Type" disabled={calendarPrefs.loading} value={activeType} onChange={e => {
+        <div className="calendar-select-control">
+          <span aria-hidden="true">{sessionTypeLabels[activeType]}</span>
+          <select aria-label="Session Type" disabled={calendarPrefs.loading} value={activeType} onChange={e => {
           setCalendarLinkedSessionId(null);
           setSessionDateFilter("");
           calendarPrefs.change(e.target.value as CalendarType);
         }}>
           {sessionTypes.map(type => <option key={type} value={type}>{sessionTypeLabels[type]}</option>)}
         </select>
-        <select aria-label="Club" disabled={calendarPrefs.loading} value={sessionClubFilter} onChange={e => {
+        </div>
+        <div className="calendar-select-control">
+          <span aria-hidden="true">{availableClubs.find(club => club.id === sessionClubFilter)?.name || "All Clubs"}</span>
+          <select aria-label="Club" disabled={calendarPrefs.loading} value={sessionClubFilter} onChange={e => {
           setCalendarLinkedSessionId(null);
           const club = e.target.value;
           const days = selectedDays.filter(day => typeRows.some(r => (club === "all" || r.clubId === club) && r.day === day));
@@ -4692,6 +4697,7 @@ React.useEffect(() => {
           <option value="all">All Clubs</option>
           {availableClubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        </div>
         <CalendarDayFilter options={dayOptions} selected={selectedDays} disabled={calendarPrefs.loading} onChange={days => {
           setCalendarLinkedSessionId(null);
           calendarPrefs.change(activeType, { days });
