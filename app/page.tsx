@@ -4699,7 +4699,7 @@ React.useEffect(() => {
         <div className="calendar-date-control">
           <span className="calendar-date-prompt" aria-hidden="true">{sessionDateFilter
             ? new Date(sessionDateFilter + "T12:00:00").toLocaleDateString("en-NZ", { day: "numeric", month: "short" })
-            : "Any Date"} 📅</span>
+            : "Date"}</span>
           <input type="date" aria-label="Date" value={sessionDateFilter} onChange={e => setSessionDateFilter(e.target.value)} />
         </div>
       </div>
