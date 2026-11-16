@@ -12202,74 +12202,74 @@ React.useEffect(() => {
           )}
 
           {activeMyStandbys.map((standbySession: any) => (
-            <div key={`my-standby-${standbySession.session_instance_id}`}
-              className="personal-activity-row">
-            <Card
-            >
-              <div>
-                <button type="button" onClick={() => openCalendarSession(standbySession.session)}
-                  style={{
-                    border: "none", background: "transparent", padding: 0, fontFamily: "inherit",
-                    color: "#4338ca",
-                    fontWeight: 700,
-                    fontSize: "16px",
-                    cursor: "pointer",
-                    textDecoration: "underline",
-                    textUnderlineOffset: "3px",
-                  }}
-                >
-                  {new Date(
-                    standbySession.session.session_date + "T00:00:00"
-                  ).toLocaleDateString("en-NZ", {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "short",
-                  })}
-                  {" · "}
-                  {standbySession.session.start_time?.slice(0, 5)}
-                </button>
+            <Card key={`my-standby-${standbySession.session_instance_id}`}>
+              <div className="personal-card-row">
+                <div>
+                  <div>
+                    <button type="button" onClick={() => openCalendarSession(standbySession.session)}
+                      style={{
+                        border: "none", background: "transparent", padding: 0, fontFamily: "inherit",
+                        color: "#4338ca",
+                        fontWeight: 700,
+                        fontSize: "16px",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                        textUnderlineOffset: "3px",
+                      }}
+                    >
+                      {new Date(
+                        standbySession.session.session_date + "T00:00:00"
+                      ).toLocaleDateString("en-NZ", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })}
+                      {" · "}
+                      {standbySession.session.start_time?.slice(0, 5)}
+                    </button>
 
-                <span
-                  style={{
-                    color: "#1e293b",
-                    fontSize: "14px",
-                    marginLeft: "8px",
-                  }}
-                >
-                  {standbySession.session.session_name}
+                    <span
+                      style={{
+                        color: "#1e293b",
+                        fontSize: "14px",
+                        marginLeft: "8px",
+                      }}
+                    >
+                      {standbySession.session.session_name}
 
-                  <span
+                      <span
+                        style={{
+                          color:
+                            standbySession.session.location_type === "Online"
+                              ? "#16a34a"
+                              : standbySession.session.location_type === "Tournaments"
+                              ? "#dc2626"
+                              : "#f59e0b",
+                          fontSize: "13px",
+                          marginLeft: "6px",
+                        }}
+                      >
+                        ({standbySession.session.location_type === "Tournaments" ? "Tournament" : standbySession.session.location_type})
+                      </span>
+                    </span>
+                  </div>
+
+                  <div
                     style={{
-                      color:
-                        standbySession.session.location_type === "Online"
-                          ? "#16a34a"
-                          : standbySession.session.location_type === "Tournaments"
-                          ? "#dc2626"
-                          : "#f59e0b",
-                      fontSize: "13px",
-                      marginLeft: "6px",
+                      ...styles.smallText,
+                      marginTop: "2px",
                     }}
                   >
-                    ({standbySession.session.location_type === "Tournaments" ? "Tournament" : standbySession.session.location_type})
-                  </span>
-                </span>
-              </div>
-
-              <div
-                style={{
-                  ...styles.smallText,
-                  marginTop: "6px",
-                }}
-              >
-                Standby status: <strong>{standbySession.standby_status}</strong>
+                    Standby: <strong>{standbySession.standby_status}</strong>
+                  </div>
+                </div>
+                {standbySession.standby_status === "Available" && standbySession.session.session_date >= today && <button type="button" style={styles.compactSecondaryAction}
+                  disabled={cancellingStandbySessionId !== null}
+                  onClick={() => cancelListedStandby(standbySession)}>
+                  {cancellingStandbySessionId === String(standbySession.session_instance_id) ? "Cancelling..." : "Cancel Standby"}
+                </button>}
               </div>
             </Card>
-            {standbySession.standby_status === "Available" && standbySession.session.session_date >= today && <button type="button" style={styles.compactSecondaryAction}
-              disabled={cancellingStandbySessionId !== null}
-              onClick={() => cancelListedStandby(standbySession)}>
-              {cancellingStandbySessionId === String(standbySession.session_instance_id) ? "Cancelling..." : "Cancel Standby"}
-            </button>}
-            </div>
           ))}
         </div>
       </main>
@@ -12412,19 +12412,9 @@ React.useEffect(() => {
             );
 
             return (
-              <div
-                key={`${match.match_id}-${match.requester_nz_bridge_number}-${match.partner_nz_bridge_number}-${match.session_instance_id}-${index}`}
-                className="personal-activity-row"
-              >
-                <Card>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: "16px",
-                    }}
-                  >
+              <Card key={`${match.match_id}-${match.requester_nz_bridge_number}-${match.partner_nz_bridge_number}-${match.session_instance_id}-${index}`}>
+                <div className="personal-card-row">
+                  <div>
                     <div>
                       <button
                         type="button"
@@ -12486,7 +12476,7 @@ React.useEffect(() => {
                         fontWeight: 400,
                         fontSize: "15px",
                         overflowWrap: "anywhere",
-                        textAlign: "right",
+                        textAlign: "left",
                       }}
                     >
                       {match.match_status === "Cancelled" ? "Cancelled partnership with" : "Matched with"}{" "}
@@ -12508,23 +12498,20 @@ React.useEffect(() => {
                       </span>
                     </div>
                   </div>
-                </Card>
-
-                  <div>
-                    {match.match_status === "Active" &&
-                      session?.session_date >= today && (
-                      <button
-                        style={styles.matchButton}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMatchToCancel(match);
-                        }}
-                      >
-                        Cancel Partnership
-                      </button>
-                    )}
-                  </div>
-              </div>
+                  {match.match_status === "Active" &&
+                    session?.session_date >= today && (
+                    <button
+                      style={styles.matchButton}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMatchToCancel(match);
+                      }}
+                    >
+                      Cancel Partnership
+                    </button>
+                  )}
+                </div>
+              </Card>
             );
           })}
         </div>

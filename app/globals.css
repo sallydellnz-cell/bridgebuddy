@@ -582,14 +582,22 @@ form + .home-screen-install button { width: 100%; font-weight: 700; }
   }
 }
 
-.personal-activity-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 180px);
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
-}
 @media (max-width: 767px) {
-  .personal-activity-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .personal-match-controls { flex-wrap: wrap; gap: 4px !important; }
+}
+
+.personal-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.personal-card-row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.personal-card-row > button {
+  flex: none;
+  max-inline-size: 45%;
+  min-height: 44px;
 }
