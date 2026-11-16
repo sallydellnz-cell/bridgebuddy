@@ -4800,6 +4800,8 @@ React.useEffect(() => {
             matchCount={filteredMatches.length}
           />
 
+          {homeScreenInstall}
+
           {!isCurrentUserDirector && (
             <PersonalMenu
               view={view}
@@ -14524,6 +14526,8 @@ React.useEffect(() => {
             <div style={styles.landingBrandName}>BRIDGE BUDDY</div>
           </div>
 
+          {homeScreenInstall}
+
           <form
             style={styles.landingLoginForm}
             onSubmit={(event) => {
@@ -14694,7 +14698,6 @@ React.useEffect(() => {
             </button>
           </div>
 
-          {homeScreenInstall}
           <p style={styles.landingCopy}>
             Find a bridge partner for a club or online session or register for a
             tournament.
