@@ -4774,7 +4774,6 @@ React.useEffect(() => {
               </p>
             )}
           </Card>
-          {homeScreenInstall}
 
         </div>
       </main>
@@ -14673,6 +14672,8 @@ React.useEffect(() => {
             )}
           </form>
 
+          {homeScreenInstall}
+
           <div style={styles.landingRegisterPrompt}>
             {landingAuthMode === "register"
               ? "Already have an account?"
@@ -14701,7 +14702,6 @@ React.useEffect(() => {
             Find a bridge partner for a club or online session or register for a
             tournament.
           </p>
-          {homeScreenInstall}
         </div>
       </section>
     </main>

@@ -48,7 +48,7 @@ export function useHomeScreenInstall() {
     };
   }, []);
 
-  if (!platform || platform === "desktop" || standalone) return null;
+  if (platform === "desktop" || standalone) return null;
   async function install() {
     if (!offer) { setShowHelp(open => !open); return; }
     setOffer(null);
@@ -58,8 +58,8 @@ export function useHomeScreenInstall() {
     } catch { setShowHelp(true); }
   }
 
-  return <div className="home-screen-install">
-    <button type="button" onClick={install} aria-expanded={offer ? undefined : showHelp}>{offer ? "Install BridgeBuddy" : "How to add to Home Screen"}</button>
+  return <div className={platform ? "home-screen-install" : "home-screen-install install-detecting"}>
+    <button type="button" onClick={install} aria-expanded={offer ? undefined : showHelp}>Install BridgeBuddy</button>
     {showHelp && <p ref={help} role="status">{platform === "ios"
       ? "In Safari, tap Share, then Add to Home Screen. If offered, turn on Open as Web App, then tap Add."
       : "In Chrome, open the ⋮ menu, tap Add to Home screen, then choose Install or Create shortcut."}</p>}
