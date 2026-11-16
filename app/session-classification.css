@@ -1,0 +1,27 @@
+.calendar-level-key i { margin-right: 6px; }
+.session-classification {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.session-classification > i { flex: none; }
+.session-classification > span { overflow: hidden; text-overflow: ellipsis; }
+.calendar-session-content > :has(> .session-classification) {
+  flex: none;
+  max-width: 55%;
+  margin-left: auto;
+}
+.club-event-heading:has(.session-classification) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.club-event-heading > .session-classification { flex: none; max-width: 55%; }
+@media (max-width: 767px) {
+  .calendar-session-content > :has(> .session-classification) { max-width: 100%; }
+}

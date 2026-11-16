@@ -26,13 +26,13 @@ body {
 }
 
 .calendar-page .calendar-navigation {
-  position: static !important;
+  position: sticky !important;
+  top: 0;
+  z-index: 20;
+  background: #f8fafc;
 }
 
 .calendar-filters {
-  position: sticky;
-  top: 0;
-  z-index: 20;
   background: #f8fafc;
   padding: 8px 0;
   display: grid;
@@ -157,6 +157,65 @@ body {
   line-height: 1.5;
 }
 
+.looking-card-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.other-system-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(22rem, calc(100% - 2rem));
+  padding: 20px;
+  color: #1e293b;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+}
+.other-system-dialog::backdrop { background: rgb(15 23 42 / 45%); }
+.other-system-dialog label { display: grid; gap: 8px; font-weight: 600; }
+.other-system-dialog input { width: 100%; border: 1px solid #94a3b8; border-radius: 6px; padding: 8px; }
+.other-system-dialog div { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.other-system-dialog button { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
+.other-system-dialog button:last-child { color: white; background: #2b8792; }
+.other-system-dialog button:disabled { opacity: .6; }
+
+.session-draft-review { display: grid; gap: 10px; margin-block: 12px; }
+.session-draft-review label { display: grid; gap: 4px; min-width: 0; }
+.session-draft-review :is(input, select) { width: 100%; min-width: 0; }
+.session-draft-review :is(input, select, button) {
+  min-height: 44px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+}
+.session-draft-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.looking-card-timestamps {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.looking-activity-timestamp {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+  .looking-card-timestamps {
+    flex-basis: 100%;
+    margin-left: 0;
+    align-items: flex-start;
+  }
+}
+
 .calendar-level-key span {
   white-space: nowrap;
 }
@@ -236,6 +295,65 @@ body {
   }
 }
 
+@media (max-width: 767px) {
+  .looking-request-row {
+    grid-template-columns: minmax(0, 1fr) 88px !important;
+    gap: 8px !important;
+    align-items: start !important;
+    margin-bottom: 12px !important;
+  }
+
+  .looking-request-row .own-looking-preferences {
+    display: none;
+  }
+
+  .looking-request-row > :first-child {
+    padding: 12px !important;
+    overflow-wrap: anywhere;
+  }
+
+  .looking-request-row > :last-child,
+  .looking-request-row > :last-child div {
+    min-width: 0 !important;
+    width: 100%;
+  }
+
+  .looking-request-row > :last-child {
+    padding-top: 8px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .looking-request-row > :last-child button {
+    width: 88px;
+    min-width: 0 !important;
+    min-height: 44px;
+    padding: 8px 6px !important;
+    white-space: normal !important;
+    line-height: 1.3;
+    font-size: 13px !important;
+    border-radius: 14px !important;
+  }
+
+  .looking-request-row > :first-child button {
+    max-width: 100%;
+    min-height: 44px;
+    white-space: normal;
+  }
+
+  .looking-request-row .interested-player-actions {
+    flex-wrap: wrap;
+    margin-left: 0 !important;
+    max-width: 100%;
+    gap: 6px !important;
+  }
+
+  .looking-request-row .interested-player-actions button {
+    padding: 8px 10px !important;
+    font-size: 13px !important;
+  }
+}
+
 /* Keep the explanatory legend on tablet and desktop layouts, including touchscreens. */
 @media (min-width: 768px) {
   .calendar-page .calendar-level-key {
@@ -243,6 +361,138 @@ body {
   }
 }
 
+.notification-profile-field { margin-block: 12px; }
+.notification-settings-link, .notification-bell { padding: 8px 12px; min-height: 44px; color: #4338ca; background: white; border: 1px solid #cbd5e1; border-radius: 12px; cursor: pointer; }
+.notification-bell strong { margin-left: 4px; }
+.notification-settings-dialog { position: fixed; inset: 0; margin: auto; width: min(25rem, calc(100% - 24px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 16px; background: white; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 16px; }
+.notification-settings-dialog::backdrop { background: rgb(15 23 42 / 45%); }
+.notification-settings-dialog header { display: flex; align-items: center; justify-content: space-between; }
+.notification-settings-dialog h2 { font-size: 1.2rem; font-weight: 700; }
+.notification-settings-dialog button { min-height: 44px; padding: 4px 10px; color: #4338ca; }
+.notification-settings-dialog header button { min-width: 44px; font-size: 1.6rem; }
+.notification-settings-dialog table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.notification-settings-dialog th, .notification-settings-dialog td { height: 44px; padding: 3px; text-align: center; border-bottom: 1px solid #e2e8f0; }
+.notification-settings-dialog th:first-child { text-align: left; }
+.notification-settings-dialog input { width: 19px; height: 19px; accent-color: #2b8792; }
+.notification-settings-dialog p { font-size: 13px; margin-top: 9px; color: #475569; }
+
+.session-filter-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  align-items: center;
+  overflow-x: auto;
+  max-width: 100%;
+  padding: 3px 1px;
+  margin: 10px 0;
+}
+.session-filter-strip select, .session-filter-strip .calendar-date-control {
+  flex: 0 0 auto;
+  min-height: 44px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 600;
+}
+.session-filter-strip select { max-width: 15rem; padding: 0 6px; }
+.session-filter-strip .calendar-date-control { width: 7rem; box-sizing: border-box; box-shadow: none; }
+.session-filter-strip .calendar-date-control input { width: 100%; height: 42px; }
+.session-filter-strip .calendar-date-prompt { justify-content: center; font-size: inherit; }
+.session-date-inline { display: inline; }
+.session-date-line { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; min-width: 0; }
+.session-date-line > :first-child { flex-shrink: 0; }
+.session-organiser { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 400; color: #576579; text-align: right; }
+.session-all-clubs-main { flex: 1; min-width: 0; }
+.session-all-clubs-main .calendar-session-heading > span { display: block; margin-left: 0 !important; }
+.calendar-session-content:has(.session-all-clubs-main) {
+  display: grid !important; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px !important;
+}
+.session-all-clubs-main { display: contents; }
+.session-all-clubs-main .calendar-session-heading { grid-column: 1 / -1; }
+.session-all-clubs-main .session-organiser { max-width: 48%; }
+@media (max-width: 1023px), (hover: none) and (pointer: coarse) {
+  .calendar-page .calendar-level-key { display: none; }
+}
+@media (max-width: 767px) {
+  .session-filter-strip { font-size: 14px; gap: 4px; }
+  .session-filter-strip select { max-width: 10rem; }
+  .session-all-clubs-main { width: 100%; }
+  .session-all-clubs-main + div { margin-top: 0; }
+}
+
+.calendar-day-trigger {
+  flex: 0 0 auto; min-height: 44px; padding: 0 8px; border: 1px solid #cbd5e1;
+  border-radius: 10px; background: #f8fafc; color: #475569; font: inherit;
+  font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.calendar-day-menu {
+  position: fixed; inset: auto; margin: 0; width: 168px; padding: 4px 8px;
+  overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 10px; background: white; color: #334155;
+}
+.calendar-day-menu label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.calendar-day-menu input { width: 18px; height: 18px; accent-color: #4338ca; }
+.session-filter-strip .calendar-day-trigger { box-sizing: border-box; height: 44px; padding: 0 8px; line-height: 1.25; }
+
+.profile-section-title {
+  font-size: .9rem;
+  font-weight: 650;
+  color: #475569;
+  margin: .45rem 0 0;
+}
+.profile-picture-button {
+  position: relative;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.profile-camera {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 2px 4px;
+  border-radius: 50%;
+  background: white;
+  font-size: 13px;
+}
+.profile-photo-dialog {
+  margin: auto;
+  padding: 14px;
+  border-radius: 15px;
+  width: min(28rem, calc(100% - 24px));
+  max-height: 90dvh;
+  overflow-y: auto;
+  background: white;
+}
+.profile-photo-dialog::backdrop { background: #18253866; }
+.profile-photo-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+@media (max-width: 600px) {
+  .profile-page .personal-menu, .profile-page .main-menu-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 3px !important;
+  }
+  .profile-page .personal-menu button, .profile-page .main-menu-grid button {
+    padding-inline: 2px !important;
+    white-space: normal !important;
+  }
+}
+.directory-player-row { position: relative; }
+.directory-name-actions, .directory-list-controls { display: flex; align-items: center; gap: 4px; }
+.directory-list-controls { align-items: end; gap: 8px; }
+.directory-list-controls label { flex: 1; }
+.directory-list-controls select { width: 100%; min-width: 0; }
+.directory-name-button { background: transparent; border: 0; padding: 0; text-align: left; overflow-wrap: anywhere; }
+.directory-name-button::after { content: ""; position: absolute; inset: 0; border-radius: 14px; cursor: pointer; }
+.directory-name-button:focus-visible::after { outline: 2px solid #0f766e; }
+.favourite-star { position: relative; flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: #475569; font-size: 22px; cursor: pointer; }
+.favourite-star[aria-pressed="true"] { color: #9a6400; }
+.favourite-star:focus-visible { outline: 2px solid #0f766e; border-radius: 8px; }
+@media (min-width: 600px) {
+  .directory-list-controls { display: contents; }
+}
 .home-screen-install button { min-height: 44px; padding: 6px 12px; border: 1px solid #bfd2d7; border-radius: 10px; color: #155e68; background: white; font: inherit; cursor: pointer; }
 .home-screen-install p { max-width: 34rem; margin: 6px 0; font-size: .9rem; color: #475569; }
 
@@ -251,3 +501,8 @@ body {
   .home-screen-install.install-detecting { display: block; }
 }
 form + .home-screen-install button { width: 100%; font-weight: 700; }
+
+.profile-install-link { display: none; }
+@media (hover: none) and (pointer: coarse) and (display-mode: browser) {
+  .profile-install-link { display: inline-flex; align-items: center; min-height: 44px; color: #155e68; font-weight: 700; }
+}
