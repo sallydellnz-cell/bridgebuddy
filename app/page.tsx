@@ -1,5 +1,6 @@
 "use client";
 
+import { useHomeScreenInstall } from "./home-screen-install";
 import { supabase } from "@/lib/supabase";
 import React, { useEffect, useMemo, useState } from "react";
 import { loadCsv } from "../lib/loadCsv";
@@ -836,6 +837,7 @@ function compareDirectorPartners(first: any, second: any, looking: Set<string>, 
 }
 
 export default function BridgeBuddy() {
+  const homeScreenInstall = useHomeScreenInstall();
   const [supabaseMembers, setSupabaseMembers] = useState<any[]>([]);
   const [staffProfiles, setStaffProfiles] = useState<Record<string, any>>({});
   const [staffDraft, setStaffDraft] = useState<StaffProfile>(emptyStaffProfile());
@@ -4013,6 +4015,7 @@ React.useEffect(() => {
               )}
             </div>
 
+            {homeScreenInstall}
             <div style={styles.accountGrid}>
               {isAccountEditing && (
                 <div style={styles.accountAvatarField}>
@@ -14691,6 +14694,7 @@ React.useEffect(() => {
             </button>
           </div>
 
+          {homeScreenInstall}
           <p style={styles.landingCopy}>
             Find a bridge partner for a club or online session or register for a
             tournament.
