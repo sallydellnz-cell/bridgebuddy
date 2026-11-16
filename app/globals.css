@@ -507,6 +507,19 @@ form + .home-screen-install button { width: 100%; font-weight: 700; }
   .profile-install-link { display: inline-flex; align-items: center; min-height: 44px; color: #155e68; font-weight: 700; }
 }
 
+.account-profile-header,
+.account-profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.account-profile-header {
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
 .account-profile-actions {
   display: flex;
   align-items: stretch;
@@ -527,7 +540,24 @@ form + .home-screen-install button { width: 100%; font-weight: 700; }
 }
 
 @media (max-width: 600px) {
+  .account-profile-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 2px;
+    align-content: center;
+    justify-items: start;
+  }
+  .account-profile-identity { display: contents; }
+  .account-profile-identity > .profile-picture-button { grid-row: 1 / span 2; }
+  .account-profile-identity > div { overflow-wrap: anywhere; }
   .account-profile-actions {
-    gap: 6px;
+    grid-column: 2;
+    gap: 4px;
+  }
+  .account-profile-actions > button {
+    padding: 3px clamp(4px, 1.4vw, 9px) !important;
+    font-size: 13px !important;
+    line-height: 1.15;
   }
 }

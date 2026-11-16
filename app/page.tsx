@@ -4059,17 +4059,8 @@ React.useEffect(() => {
           </div>
 
           <Card>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "12px",
-                flexWrap: "wrap",
-                marginBottom: "18px",
-              }}
-            >
-              <div style={styles.accountIdentity}>
+            <div className="account-profile-header">
+              <div className="account-profile-identity">
                 <button type="button" className="profile-picture-button" aria-label="Manage profile picture"
                   disabled={!calendarUser || !profileEditorReady || isAccountProfileLoading || isAccountEditing}
                   onClick={() => {
@@ -14944,12 +14935,6 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#f8fafc",
     border: "1px solid #e2e8f0",
     borderRadius: "12px",
-  },
-  accountIdentity: {
-    display: "flex",
-    alignItems: "center",
-    gap: "14px",
-    minWidth: 0,
   },
   accountGrid: {
     display: "flex",
