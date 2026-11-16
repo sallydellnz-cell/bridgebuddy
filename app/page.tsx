@@ -4847,7 +4847,9 @@ React.useEffect(() => {
               );
 
             const currentMemberCardStatus = personalCalendar
-              ? [...(personalActivity.get(String(session.session_instance_id))?.[activityTab] ?? [])].join(" · ")
+              ? [...(personalActivity.get(String(session.session_instance_id))?.[activityTab] ?? [])]
+                  .filter(label => activityTab !== "looking" || label !== "Looking for a partner")
+                  .join(" · ")
               : currentMemberTournamentRegistrationForSession
                 ? "You are registered"
                 : currentMemberMatchForSession

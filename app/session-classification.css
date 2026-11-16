@@ -23,5 +23,21 @@
 }
 .club-event-heading > .session-classification { flex: none; max-width: 55%; }
 @media (max-width: 767px) {
-  .calendar-session-content > :has(> .session-classification) { max-width: 100%; }
+  .calendar-session-content:has(> div > .session-classification),
+  div:has(> .club-event-heading > .session-classification) {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .calendar-session-content > div:has(> .session-classification),
+  .club-event-heading:has(> .session-classification) {
+    display: contents;
+  }
+  .calendar-session-content .session-classification,
+  .club-event-heading > .session-classification {
+    order: -1;
+    align-self: flex-start;
+    max-width: 100%;
+    text-align: left;
+  }
 }
