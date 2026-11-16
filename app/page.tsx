@@ -4734,15 +4734,12 @@ React.useEffect(() => {
               || supabaseMembers.find(member => String(member.club_id) === String(session.club_id))?.club_name;
             const cardLegend = clubSettings.find(c => String(c.club_id) === String(session.club_id))?.session_legend;
             if (session.is_club_event) return <Card key={session.session_instance_id}>
-              <div className="session-date-line"><strong>{session.session_date} · {session.start_time || "Time unconfirmed"}</strong>{allClubs && <Organiser name={organiser} />}</div>
+              <div className="session-card-top"><strong>{session.session_date} · {session.start_time || "Time unconfirmed"}</strong>{allClubs ? <Organiser name={organiser} /> : <SessionLegendMarker legend={cardLegend} session={session} />}</div>
               {allClubs ? <details>
                 <summary><strong>{session.session_name}</strong></summary>
                 <ProgrammeDetails programme={session} /><p>Partner search unavailable for this event.</p>
               </details> : <>
-                <div className="club-event-heading">
-                  <strong>{session.session_name}</strong>
-                  <SessionLegendMarker legend={cardLegend} session={session} />
-                </div>
+                <strong>{session.session_name}</strong>
                 <ProgrammeDetails programme={session} /><p>Partner search unavailable for this event.</p>
               </>}
             </Card>;
@@ -4915,19 +4912,8 @@ React.useEffect(() => {
                   );
                 }}
               >
-              <div
-                className="calendar-session-content"
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: "16px",
-                }}
-              >
-            <div className={allClubs ? "session-all-clubs-main" : undefined}>
-
-                <div className="calendar-session-heading" style={{ fontSize: "16px" }}>
-                  <div className={allClubs ? "session-date-line" : "session-date-inline"}><button
+              <div className="compact-session-card">
+                <div className="session-card-top"><button
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
@@ -4963,17 +4949,13 @@ React.useEffect(() => {
                     })}
                     {" · "}
                     {session.start_time?.slice(0, 5)}
-                  </button>{allClubs && <Organiser name={organiser} />}</div>
+                  </button>
+                  {allClubs ? <Organiser name={organiser} /> :
+                    <SessionLegendMarker legend={cardLegend} session={{ ...session, ...programmeFor(clubProgramme, session) }} />}
+                </div>
 
-                 {allClubs ? <span>{session.session_name}</span> : (
-                 <span
-                    style={{
-                      color: "#1e293b",
-                      fontWeight: 400,
-                      fontSize: "14px",
-                      marginLeft: "8px",
-                    }}
-                  >
+                <div className="session-card-title" style={{ fontSize: allClubs ? "16px" : "14px" }}>
+                  {allClubs ? session.session_name : <>
                     {session.session_name}
                     <ProgrammeDetails programme={programmeFor(clubProgramme, session)} />
 
@@ -5002,15 +4984,14 @@ React.useEffect(() => {
                         ({session.location_type})
                       </span>
                     )}
-                  </span>
-                 )}
+                  </>}
                 </div>
 
+                <div className="session-card-bottom">
                   <div
                     style={{
                       color: "#0f172a",
                       fontSize: "14px",
-                      marginTop: "4px",
                     }}
                   >
                     {(() => {
@@ -5324,20 +5305,13 @@ React.useEffect(() => {
                       );
                     })()}
                   </div>
-                </div>
-                
-
-                <div style={{ textAlign: "right" }}>
-                  {!allClubs && <SessionLegendMarker legend={cardLegend} session={{ ...session, ...programmeFor(clubProgramme, session) }} />}
-
                   {currentMemberCardStatus && (
                     <div
                       style={{
                         color: "#475569",
                         fontSize: "12px",
                         fontWeight: 700,
-                        marginTop: "11px",
-                        whiteSpace: personalCalendar ? "normal" : "nowrap",
+                        textAlign: "right",
                       }}
                     >
                       {currentMemberCardStatus}
